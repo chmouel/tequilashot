@@ -36,6 +36,13 @@ type swayOutput struct {
 
 // GetFocusedWindowGeometry returns the geometry of the focused window
 func GetFocusedWindowGeometry(ctx context.Context) (string, error) {
+	if isHyprland() {
+		return hyprFocusedWindowGeometry(ctx)
+	}
+	return swayFocusedWindowGeometry(ctx)
+}
+
+func swayFocusedWindowGeometry(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "swaymsg", "-t", "get_tree")
 	output, err := cmd.Output()
 	if err != nil {
@@ -58,6 +65,13 @@ func GetFocusedWindowGeometry(ctx context.Context) (string, error) {
 
 // GetOutputGeometry returns the geometry string for the named output.
 func GetOutputGeometry(ctx context.Context, outputName string) (string, error) {
+	if isHyprland() {
+		return hyprOutputGeometry(ctx, outputName)
+	}
+	return swayOutputGeometry(ctx, outputName)
+}
+
+func swayOutputGeometry(ctx context.Context, outputName string) (string, error) {
 	cmd := exec.CommandContext(ctx, "swaymsg", "-t", "get_outputs")
 	output, err := cmd.Output()
 	if err != nil {
@@ -81,6 +95,13 @@ func GetOutputGeometry(ctx context.Context, outputName string) (string, error) {
 
 // GetFocusedOutputName returns the name of the focused output
 func GetFocusedOutputName(ctx context.Context) (string, error) {
+	if isHyprland() {
+		return hyprFocusedOutputName(ctx)
+	}
+	return swayFocusedOutputName(ctx)
+}
+
+func swayFocusedOutputName(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "swaymsg", "-t", "get_outputs")
 	output, err := cmd.Output()
 	if err != nil {
@@ -103,6 +124,13 @@ func GetFocusedOutputName(ctx context.Context) (string, error) {
 
 // SelectOutput provides interactive output selection
 func SelectOutput(ctx context.Context, useCurrentScreen bool) (string, error) {
+	if isHyprland() {
+		return hyprSelectOutput(ctx, useCurrentScreen)
+	}
+	return swaySelectOutput(ctx, useCurrentScreen)
+}
+
+func swaySelectOutput(ctx context.Context, useCurrentScreen bool) (string, error) {
 	if useCurrentScreen {
 		return GetFocusedOutputName(ctx)
 	}
