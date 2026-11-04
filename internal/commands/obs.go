@@ -80,6 +80,14 @@ func (h *OBSHandler) TogglePause(ctx context.Context) error {
 	}
 	log.Printf("OBS status: active=%v paused=%v", status.OutputActive, status.OutputPaused)
 
+	// OBS accepts PauseRecord on an inactive output without reporting an error,
+	// so trusting it would leave the indicator stuck on paused forever.
+	if !status.OutputActive {
+		h.state.SetOBSState(false, false)
+		_ = notify.Send(2000, h.cfg.ScreenshotIcon, "OBS is not recording")
+		return fmt.Errorf("OBS is not recording")
+	}
+
 	if status.OutputPaused {
 		if _, err := client.Record.ResumeRecord(); err != nil {
 			return fmt.Errorf("failed to resume OBS recording: %w", err)
