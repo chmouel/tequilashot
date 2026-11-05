@@ -34,8 +34,6 @@ func main() {
 		Commands: []*cli.Command{
 			daemonCommand(),
 			waybarStatusCommand(),
-			obsToggleRecordingCommand(),
-			obsTogglePauseCommand(),
 			currentWindowClipboardCommand(),
 			currentWindowFileCommand(),
 			currentScreenClipboardCommand(),
@@ -106,16 +104,6 @@ func waybarStatusCommand() *cli.Command {
 				Value: "󰏤",
 			},
 			&cli.StringFlag{
-				Name:  "icon-obs-recording",
-				Usage: "Icon for OBS recording state",
-				Value: "󰑊",
-			},
-			&cli.StringFlag{
-				Name:  "icon-obs-paused",
-				Usage: "Icon for OBS paused recording state",
-				Value: "󰏤",
-			},
-			&cli.StringFlag{
 				Name:  "icon-countdown",
 				Usage: "Icon for countdown state",
 				Value: "⏱",
@@ -133,14 +121,6 @@ func waybarStatusCommand() *cli.Command {
 			return handleWaybarStatus(cfg, c.Bool("follow"), c.Bool("no-idle-output"), c)
 		},
 	}
-}
-
-func obsToggleRecordingCommand() *cli.Command {
-	return createSimpleCommand("obs-toggle-recording", "Toggle OBS recording")
-}
-
-func obsTogglePauseCommand() *cli.Command {
-	return createSimpleCommand("obs-toggle-pause", "Toggle OBS pause state")
 }
 
 func currentWindowClipboardCommand() *cli.Command {
@@ -636,12 +616,10 @@ func sendRequestTimeout(socketPath string, req protocol.Request, timeout time.Du
 
 func handleWaybarStatus(cfg *config.Config, follow, noIdleOutput bool, c *cli.Command) error {
 	icons := state.Icons{
-		Idle:         c.String("icon-idle"),
-		Recording:    c.String("icon-recording"),
-		Paused:       c.String("icon-paused"),
-		ObsRecording: c.String("icon-obs-recording"),
-		ObsPaused:    c.String("icon-obs-paused"),
-		Countdown:    c.String("icon-countdown"),
+		Idle:      c.String("icon-idle"),
+		Recording: c.String("icon-recording"),
+		Paused:    c.String("icon-paused"),
+		Countdown: c.String("icon-countdown"),
 	}
 	if follow {
 		return followWaybarStatus(cfg, icons, noIdleOutput)

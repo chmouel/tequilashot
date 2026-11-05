@@ -12,7 +12,6 @@ A screenshot and screen recording utility for Sway/Wayland.
 - Clipboard integration
 - Image editing with satty
 - Waybar status integration
-- OBS integration
 - Daemon mode.
 
 ## Dependencies
@@ -23,7 +22,7 @@ A screenshot and screen recording utility for Sway/Wayland.
 - [slurp](https://github.com/emersion/slurp) - region selection
 - [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) - screen recording
 - [wl-clipboard](https://github.com/bugaevc/wl-clipboard) - clipboard (wl-copy/wl-paste)
-- [ffmpeg](https://ffmpeg.org/) - remuxing OBS recordings to MP4
+- [ffmpeg](https://ffmpeg.org/) - video processing
 - [GTK 4](https://www.gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - runtime libraries for the capture dialogue (building from source requires their development headers and cgo)
 
 **Optional:**
@@ -33,8 +32,6 @@ A screenshot and screen recording utility for Sway/Wayland.
 - [zenity](https://gitlab.gnome.org/GNOME/zenity) - dialogs
 - [nautilus](https://apps.gnome.org/Nautilus/) - file browser
 - [fd](https://github.com/sharkdp/fd) - file cleanup
-- [obs-cli](https://github.com/muesli/obs-cli) - OBS Studio control
-- [pass](https://www.passwordstore.org/) - password store (for OBS)
 - [aichat](https://github.com/sigoden/aichat) - AI-generated filenames
 
 ## Installation
@@ -98,10 +95,6 @@ sway-easyshot
 # Waybar integration
 sway-easyshot waybar-status
 sway-easyshot waybar-status --follow
-
-# OBS integration
-sway-easyshot obs-toggle-recording
-sway-easyshot obs-toggle-pause
 ```
 
 ## Microphone Selection

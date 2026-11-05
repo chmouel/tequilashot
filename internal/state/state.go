@@ -8,7 +8,7 @@ import (
 	"sway-easyshot/pkg/protocol"
 )
 
-// State tracks the current state of recordings and OBS.
+// State tracks the current state of recordings.
 type State struct {
 	mu                 sync.RWMutex
 	recording          bool
@@ -17,31 +17,25 @@ type State struct {
 	recordingPID       int
 	quietFinish        bool
 	recordingStartTime time.Time
-	obsRecording       bool
-	obsPaused          bool
 	countdownRemaining int
 	icons              Icons
 }
 
 // Icons holds custom icons for different states.
 type Icons struct {
-	Idle         string
-	Recording    string
-	Paused       string
-	ObsRecording string
-	ObsPaused    string
-	Countdown    string
+	Idle      string
+	Recording string
+	Paused    string
+	Countdown string
 }
 
 // DefaultIcons returns the default icon set.
 func DefaultIcons() Icons {
 	return Icons{
-		Idle:         "",
-		Recording:    "󰑊",
-		Paused:       "󰏤",
-		ObsRecording: "󰑊",
-		ObsPaused:    "󰏤",
-		Countdown:    "⏱",
+		Idle:      "",
+		Recording: "󰑊",
+		Paused:    "󰏤",
+		Countdown: "⏱",
 	}
 }
 
@@ -68,8 +62,6 @@ func (s *State) GetState() *protocol.State {
 		Recording:     s.recording,
 		Paused:        s.paused,
 		RecordingFile: s.recordingFile,
-		OBSRecording:  s.obsRecording,
-		OBSPaused:     s.obsPaused,
 	}
 }
 
@@ -101,15 +93,6 @@ func (s *State) QuietFinish() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.quietFinish
-}
-
-// SetOBSState sets the OBS recording and pause state.
-func (s *State) SetOBSState(recording, paused bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.obsRecording = recording
-	s.obsPaused = paused
 }
 
 // GetRecordingPID returns the process ID of the current recording.
@@ -145,7 +128,7 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Priority: countdown > screen recorder > OBS
+	// Priority: countdown > screen recorder
 	if s.countdownRemaining > 0 {
 		return &protocol.WaybarStatus{
 			Text:    fmt.Sprintf("%s %d", s.icons.Countdown, s.countdownRemaining),
@@ -170,23 +153,6 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 		return &protocol.WaybarStatus{
 			Text:    fmt.Sprintf("%s %02d:%02d", s.icons.Recording, minutes, seconds),
 			Tooltip: fmt.Sprintf("Recording: %s (%02d:%02d)", s.recordingFile, minutes, seconds),
-			Class:   "recording",
-			Alt:     "recording",
-		}
-	}
-
-	if s.obsRecording {
-		if s.obsPaused {
-			return &protocol.WaybarStatus{
-				Text:    s.icons.ObsPaused,
-				Tooltip: "OBS recording paused",
-				Class:   "paused",
-				Alt:     "paused",
-			}
-		}
-		return &protocol.WaybarStatus{
-			Text:    s.icons.ObsRecording,
-			Tooltip: "OBS recording in progress",
 			Class:   "recording",
 			Alt:     "recording",
 		}

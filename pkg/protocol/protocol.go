@@ -20,8 +20,6 @@ type State struct {
 	Recording     bool   `json:"recording"`
 	Paused        bool   `json:"paused"`
 	RecordingFile string `json:"recording_file,omitempty"`
-	OBSRecording  bool   `json:"obs_recording"`
-	OBSPaused     bool   `json:"obs_paused"`
 }
 
 // WaybarStatus represents the status for waybar integration

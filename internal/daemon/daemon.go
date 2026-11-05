@@ -27,7 +27,6 @@ type Daemon struct {
 	listener          net.Listener
 	screenshotHandler *commands.ScreenshotHandler
 	recordingHandler  *commands.RecordingHandler
-	obsHandler        *commands.OBSHandler
 	ctx               context.Context
 	cancel            context.CancelFunc
 	debug             bool
@@ -43,7 +42,6 @@ func New(cfg *config.Config, debug bool) *Daemon {
 		state:             st,
 		screenshotHandler: commands.NewScreenshotHandler(cfg, st),
 		recordingHandler:  commands.NewRecordingHandler(cfg, st),
-		obsHandler:        commands.NewOBSHandler(cfg, st),
 		ctx:               ctx,
 		cancel:            cancel,
 		debug:             debug,
@@ -245,13 +243,6 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 		}
 		err = d.recordingHandler.ToggleRecord(ctx, startAction, delay, useCurrentScreen, cropTop, opts)
 
-	// OBS commands
-	case "obs-toggle-recording":
-		err = d.obsHandler.ToggleRecording(ctx)
-
-	case "obs-toggle-pause":
-		err = d.obsHandler.TogglePause(ctx)
-
 	// Waybar status
 	case "waybar-status":
 		// Check if custom icons were provided in the request
@@ -266,12 +257,6 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 				}
 				if paused, ok := iconsMap["Paused"].(string); ok {
 					icons.Paused = paused
-				}
-				if obsRecording, ok := iconsMap["ObsRecording"].(string); ok {
-					icons.ObsRecording = obsRecording
-				}
-				if obsPaused, ok := iconsMap["ObsPaused"].(string); ok {
-					icons.ObsPaused = obsPaused
 				}
 				if countdown, ok := iconsMap["Countdown"].(string); ok {
 					icons.Countdown = countdown
