@@ -31,6 +31,19 @@ jobs:
       - name: Mark workspace as safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-arch-${{ hashFiles('go.sum') }}
+          restore-keys: go-arch-
+
+      # Compiling the GTK bindings takes several minutes, so warm the cache
+      # before golangci-lint runs under its timeout.
+      - name: Build
+        run: go build ./...
+
       - name: Run Pre-commit
         run: |
           uvx pre-commit run -a
