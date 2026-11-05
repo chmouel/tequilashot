@@ -1,7 +1,22 @@
 version: 2
 
 builds:
-  - env:
+  # The capture dialogue needs CGO and a recent GTK 4 with libadwaita, so it is
+  # built for x86_64 only.
+  - id: gui
+    env:
+      - CGO_ENABLED=1
+    main: ./cmd/tequilashot
+    binary: tequilashot
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -w
+      - -s
+  - id: cli
+    env:
       - CGO_ENABLED=0
     main: ./cmd/tequilashot
     flags:
@@ -16,7 +31,10 @@ builds:
       - -w
       - -s
 archives:
-  - name_template: >-
+  - id: gui
+    ids:
+      - gui
+    name_template: >-
       {{ .Binary }}_
       {{- .Version }}_
       {{- .Os }}_
@@ -24,6 +42,27 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else if eq .Arch "arm64" }}aarch64
       {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - src: assets/com.chmouel.Tequilashot.Recorder.desktop
+        dst: com.chmouel.Tequilashot.Recorder.desktop
+      - src: assets/tequilashot-mark.svg
+        dst: tequilashot-mark.svg
+  - id: cli
+    ids:
+      - cli
+    name_template: >-
+      tequilashot-nogui_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else if eq .Arch "arm64" }}aarch64
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
 checksum:
   name_template: "checksums.txt"
 
@@ -31,7 +70,46 @@ release:
   prerelease: "false"
 
 nfpms:
-  - file_name_template: >-
+  - id: gui
+    ids:
+      - gui
+    file_name_template: >-
+      tequilashot-
+      {{- .Version}}_{{.Os}}-
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else if eq .Arch "arm64" }}aarch64
+      {{- else }}{{ .Arch }}{{ end }}
+    homepage: https://github.com/chmouel/tequilashot
+    description: "Tequilashot - screenshots and screen recording for Wayland"
+    maintainer: Chmouel Boudjnah <chmouel@chmouel.com>
+    license: Apache 2.0
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/licenses/tequilashot/LICENSE
+      - src: ./assets/com.chmouel.Tequilashot.Recorder.desktop
+        dst: /usr/share/applications/com.chmouel.Tequilashot.Recorder.desktop
+      - src: ./assets/tequilashot-mark.svg
+        dst: /usr/share/icons/hicolor/scalable/apps/com.chmouel.Tequilashot.Recorder.svg
+    overrides:
+      deb:
+        dependencies:
+          - libgtk-4-1
+          - libadwaita-1-0 (>= 1.9)
+          - libgirepository-1.0-1
+      rpm:
+        dependencies:
+          - gtk4
+          - libadwaita >= 1.9
+          - gobject-introspection
+  - id: cli
+    ids:
+      - cli
+    file_name_template: >-
       tequilashot-
       {{- .Version}}_{{.Os}}-
       {{- if eq .Arch "amd64" }}x86_64
@@ -44,9 +122,10 @@ nfpms:
     license: Apache 2.0
     formats:
       - apk
-      - deb
-      - rpm
     bindir: /usr/bin
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/licenses/tequilashot/LICENSE
 changelog:
   sort: desc
   use: git
@@ -78,6 +157,8 @@ changelog:
 
 aurs:
   - name: tequilashot-bin
+    ids:
+      - gui
     homepage: "https://github.com/chmouel/tequilashot"
     description: "Tequilashot - screenshots and screen recording for Wayland"
     maintainers:
@@ -89,8 +170,16 @@ aurs:
       - tequilashot
       - sway-easyshot
       - sway-easyshot-bin
+    depends:
+      - gtk4
+      - "libadwaita>=1:1.9"
+      - libgirepository
+    optdepends:
+      - "gtk4-layer-shell: round camera bubble"
     private_key: "{{ .Env.AUR_PRIVATE_KEY }}"
     git_url: ssh://aur@aur.archlinux.org/tequilashot-bin.git
     package: |-
       install -Dm755 "./tequilashot" "${pkgdir}/usr/bin/tequilashot"
       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/tequilashot/LICENSE"
+      install -Dm644 "./com.chmouel.Tequilashot.Recorder.desktop" "${pkgdir}/usr/share/applications/com.chmouel.Tequilashot.Recorder.desktop"
+      install -Dm644 "./tequilashot-mark.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/com.chmouel.Tequilashot.Recorder.svg"

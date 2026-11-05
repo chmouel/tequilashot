@@ -96,8 +96,7 @@ back to the setup page.
 
 ## Install
 
-The capture dialogue needs a build from source. Release binaries and the AUR
-package are command line only.
+You can install a package or build from source.
 
 ### Build from source
 
@@ -123,14 +122,19 @@ CGO_ENABLED=0 go build -tags nogui -o bin/tequilashot ./cmd/tequilashot
 
 ### Prebuilt releases
 
-Arch Linux users can install the command-line build from the AUR:
+[GitHub Releases](https://github.com/chmouel/tequilashot/releases) has an
+x86_64 archive, deb and rpm packages, all carrying the capture dialogue, a
+desktop launcher and the application icon. They need GTK 4 and libadwaita at
+run time, and gtk4-layer-shell for the round camera.
+
+Arch Linux users can install the same build from the AUR:
 
 ```sh
 yay -S tequilashot-bin
 ```
 
-[GitHub Releases](https://github.com/chmouel/tequilashot/releases) has Linux
-archives for x86_64 and aarch64, plus deb, rpm and apk packages.
+The aarch64 archive and the apk packages for both architectures carry the
+command-line tools only.
 
 ### Runtime tools
 

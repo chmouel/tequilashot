@@ -15,7 +15,7 @@ for the round camera. Two build tags change what is compiled:
 
 | Tag | Effect |
 | --- | --- |
-| `nogui` | Leaves out the dialogue and the round camera; builds with `CGO_ENABLED=0`. Release binaries use it. |
+| `nogui` | Leaves out the dialogue and the round camera; builds with `CGO_ENABLED=0`. The aarch64 tarball and the apk packages use it. |
 | `demo` | Replaces monitors, windows, cameras and microphones with staged content and disables capture. Used for the README screenshots. |
 
 The code is laid out as follows: `cmd/tequilashot` holds the CLI and its
@@ -47,9 +47,11 @@ directory holding the staged assets that `hack/screenshots.py` writes.
 
 Run `make release` (or `scripts/make-release.sh --patch`, `--minor`,
 `--major`; add `-n` for a dry run) to create and push a signed `vX.Y.Z` tag.
-Pushing a `v*` tag starts the release workflow, which runs GoReleaser to build
-the Linux archives and packages, write release notes grouped by Conventional
-Commit type, and publish `tequilashot-bin` to the AUR.
+Pushing a `v*` tag starts the release workflow, which runs GoReleaser inside an
+Arch Linux container: it builds a GTK 4 binary for x86_64 and a `nogui` binary
+for x86_64 and aarch64, packs the desktop entry and the icon where the dialogue
+is included, writes release notes grouped by Conventional Commit type, and
+publishes `tequilashot-bin` to the AUR.
 
 ## Daemon socket protocol
 

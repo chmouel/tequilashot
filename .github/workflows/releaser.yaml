@@ -14,18 +14,20 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # The GUI build needs a recent libadwaita, newer than Ubuntu ships.
+    container: archlinux:latest
     steps:
-      -
-        name: Checkout
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git go gtk4 libadwaita libgirepository openssh
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Fetch all tags
         run: git fetch --force --tags
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

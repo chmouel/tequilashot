@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Tequilashot
+GenericName=Screen Recorder
+Comment=Take screenshots and record your screen
+Exec=tequilashot
+Icon=com.chmouel.Tequilashot.Recorder
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Recorder;
+Keywords=screenshot;screen capture;screen recorder;recording;Wayland;
+StartupNotify=true
