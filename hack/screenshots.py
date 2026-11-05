@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render the README and social-preview images for the recording dialogue.
+"""Render the README and social-preview images for the capture dialogue.
 
-Runs the `demo` build of sway-easyshot (staged monitors, windows and a
-recording, so no real desktop content is captured), grabs each page on a
+Runs the `demo` build of sway-easyshot (staged monitors, windows, a
+screenshot and a recording, so no real desktop content is captured), grabs each page on a
 Hyprland session with grim and composes the results with Pillow.
 
 Usage: python3 hack/screenshots.py   (or: make screenshots)
@@ -25,6 +25,7 @@ OUT = ROOT / ".github" / "screenshots"
 APP_CLASS = "com.chmouel.SwayEasyshot.Recorder"
 CLIP = "recording-20261105-13h04.mp4"
 WINDOW_RADIUS = 14
+PAGES = ("monitor", "window", "result", "screenshot", "screenshot-result")
 
 
 def font(size, weight="Bold"):
@@ -168,6 +169,7 @@ def stage_assets(tmp):
         preview = mock_window(w // 4, h // 4, kind, random.Random(i)).convert("RGB")
         preview.thumbnail((112, 64), Image.LANCZOS)
         preview.save(tmp / f"window-{i}.jpg", quality=92)
+    mock_desktop(1920, 1080, 4, walls["HDMI-A-1"]).save(tmp / "screenshot.png")
     frame = mock_camera_tile(mock_desktop(1920, 1080, 3, walls["DP-1"]))
     frame.save(tmp / "frame.png")
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-loop", "1", "-framerate", "2", "-i", str(tmp / "frame.png"),
@@ -233,14 +235,14 @@ def capture(binary, tmp, page):
             if win:
                 break
         if not win:
-            sys.exit(f"recording dialogue window for {page!r} never appeared")
+            sys.exit(f"capture dialogue window for {page!r} never appeared")
         time.sleep(2.5)  # thumbnails, staged selection and preview frame
         win = hypr_window()
         if not visible_and_on_top(win):
             sys.exit(f"{page!r}: the dialogue is hidden or overlapped by another window; "
                      "leave the desktop alone while screenshots are taken. Nothing was written.")
         (x, y), (w, h) = win["at"], win["size"]
-        shot = tmp / f"{page}.png"
+        shot = tmp / f"capture-{page}.png"
         subprocess.run(["grim", "-g", f"{x},{y} {w}x{h}", str(shot)], check=True)
         after = hypr_window()
         img = Image.open(shot).convert("RGBA")
@@ -285,11 +287,11 @@ def backdrop(w, h, seed):
 
 
 def hero(shots):
-    """Wide camera-enabled setup on top, window picker and result card below."""
+    """Wide camera-enabled setup on top; window picker and both result cards below."""
     top = rounded(shots["monitor"])
-    bottom = [rounded(shots[p]) for p in ("window", "result")]
+    bottom = [rounded(shots[p]) for p in ("window", "result", "screenshot-result")]
     gap, margin = 56, 72
-    bottom_w = sum(i.width for i in bottom) + gap
+    bottom_w = sum(i.width for i in bottom) + gap * (len(bottom) - 1)
     w = max(top.width, bottom_w) + margin * 2
     bottom_h = max(i.height for i in bottom)
     h = margin + top.height + gap + bottom_h + margin + 20
@@ -361,7 +363,7 @@ def main():
         binary = str(tmp / "sway-easyshot-demo")
         subprocess.run(["go", "build", "-tags", "demo", "-o", binary, "./cmd/sway-easyshot"], cwd=ROOT, check=True)
         stage_assets(tmp)
-        shots = {p: capture(binary, tmp, p) for p in ("monitor", "window", "result")}
+        shots = {p: capture(binary, tmp, p) for p in PAGES}
         for page, img in shots.items():
             rounded(img).save(OUT / f"dialogue-{page}.png")
         hero(shots).save(OUT / "dialogue.png", optimize=True)
