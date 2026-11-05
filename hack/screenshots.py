@@ -163,6 +163,11 @@ def stage_assets(tmp):
     for i, (name, wall) in enumerate(walls.items()):
         mock_desktop(960, 540, i + 3, wall).save(tmp / f"{name}.jpg", quality=92)
     mock_camera_picture().save(tmp / "camera.jpg", quality=92)
+    for i, (w, h, kind) in enumerate([(1906, 2115, "terminal"), (1906, 2115, "doc"),
+                                      (1280, 800, "doc"), (1906, 1035, "doc")], 1):
+        preview = mock_window(w // 4, h // 4, kind, random.Random(i)).convert("RGB")
+        preview.thumbnail((112, 64), Image.LANCZOS)
+        preview.save(tmp / f"window-{i}.jpg", quality=92)
     frame = mock_camera_tile(mock_desktop(1920, 1080, 3, walls["DP-1"]))
     frame.save(tmp / "frame.png")
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-loop", "1", "-framerate", "2", "-i", str(tmp / "frame.png"),

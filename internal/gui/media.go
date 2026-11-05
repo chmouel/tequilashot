@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"math"
 	"os"
 	"os/exec"
@@ -15,11 +16,31 @@ import (
 	"time"
 )
 
-// MediaInfo describes a finished recording.
+// MediaInfo describes a saved recording or screenshot
 type MediaInfo struct {
 	Duration      time.Duration
 	Width, Height int
 	Size          int64
+}
+
+// ProbeImage reads PNG dimensions and file size without external tools
+func ProbeImage(file string) (MediaInfo, error) {
+	f, err := os.Open(file) //nolint:gosec
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	info := MediaInfo{Size: st.Size()}
+	cfg, err := png.DecodeConfig(f)
+	if err != nil {
+		return info, err
+	}
+	info.Width, info.Height = cfg.Width, cfg.Height
+	return info, nil
 }
 
 type probeOutput struct {

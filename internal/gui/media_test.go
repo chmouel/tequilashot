@@ -1,11 +1,60 @@
 package gui
 
 import (
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestProbeImage(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.png")
+	f, err := os.Create(path) //nolint:gosec
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 17, 29))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := ProbeImage(path)
+	if err != nil || info.Width != 17 || info.Height != 29 || info.Size != st.Size() || info.Duration != 0 {
+		t.Fatalf("unexpected image details: %+v, %v", info, err)
+	}
+	if _, err := ProbeImage(path + ".missing"); err == nil {
+		t.Fatal("expected an error for a missing image")
+	}
+	if err := os.WriteFile(path, []byte("invalid PNG"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProbeImage(path); err == nil {
+		t.Fatal("expected an error for an invalid PNG")
+	}
+}
+
+func TestRenameScreenshot(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "capture.png")
+	for _, name := range []string{"renamed", "renamed.png"} {
+		if got, err := RenameTarget(old, name); err != nil || got != filepath.Join(dir, "renamed.png") {
+			t.Fatalf("PNG extension was not preserved: %q, %v", got, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "taken.png"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenameTarget(old, "taken"); err == nil {
+		t.Fatal("an existing PNG must not be overwritten")
+	}
+}
 
 func TestParseProbe(t *testing.T) {
 	got, err := ParseProbe([]byte(`{"streams":[{"width":1920,"height":1080}],"format":{"duration":"42.480000"}}`))

@@ -24,7 +24,7 @@ A screenshot and screen recording utility for Sway/Wayland.
 - [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) - screen recording
 - [wl-clipboard](https://github.com/bugaevc/wl-clipboard) - clipboard (wl-copy/wl-paste)
 - [ffmpeg](https://ffmpeg.org/) - remuxing OBS recordings to MP4
-- [GTK 4](https://www.gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - runtime libraries for the recording dialogue (building from source requires their development headers and cgo)
+- [GTK 4](https://www.gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - runtime libraries for the capture dialogue (building from source requires their development headers and cgo)
 
 **Optional:**
 
@@ -57,7 +57,7 @@ Or build directly:
 make build
 ```
 
-Prebuilt release binaries are static and do not include the recording
+Prebuilt release binaries are static and do not include the capture
 dialogue; running `sway-easyshot` without a command there reports that it was built without GUI support.
 Building from source with the GTK 4 and libadwaita development files installed
 includes it. To build a static binary without the dialogue, use
@@ -92,7 +92,7 @@ sway-easyshot pause-recording
 sway-easyshot toggle-record
 sway-easyshot toggle-record -a movie-screen --crop-top 75
 
-# Recording dialogue (GTK4/libadwaita), the default without a command
+# Capture dialogue (GTK4/libadwaita), the default without a command
 sway-easyshot
 
 # Waybar integration
@@ -133,20 +133,32 @@ time: if another program holds it, the recording fails to start and the
 reason is reported. Start requests wait without a time limit for the
 selection and countdown to finish.
 
-## Recording Dialogue
+## Capture Dialogue
 
-Running `sway-easyshot` without a command opens a small libadwaita window in which to choose
-the source (a monitor with a live thumbnail, an open window, or a region), the
-audio sources (desktop sound, microphone; when the microphone is on, a
+Running `sway-easyshot` without a command opens a small libadwaita window. Choose
+Screenshot or Video, a source (a monitor with a live thumbnail, an open window,
+or a region), and a countdown of 0, 3, 5 or 10 seconds. The last mode is
+remembered; Video is selected on first launch and for existing settings.
+
+In Screenshot mode, Capture hides the dialogue and saves a PNG in the configured
+screenshot directory. The result card shows the complete image, its name,
+resolution and size, with actions to open it, copy the image, edit it in Satty,
+reveal it in the file manager, copy its path, rename it or move it to the bin.
+Edit saves back to the same PNG and refreshes the preview when Satty closes.
+"New screenshot" (or Escape) returns to setup. Images do not require `ffmpeg`
+or `ffprobe`. AI naming remains available through the CLI notification actions.
+
+Video mode also offers audio sources (desktop sound, microphone; when the microphone is on, a
 Microphone selector offers the system default or any detected input), an optional webcam overlay and a
-countdown of 0, 3, 5 or 10 seconds. The Camera button appears only when a
+top-bar crop for monitor recordings. The Camera button appears only when a
 webcam is found; switching it on reveals a live layout preview, in which the
 camera picture sits over the chosen source exactly where it will appear in the
 recording. Click the preview (or use the arrow keys) to move the camera to the
 nearest corner, and choose the device, the size (small, medium or large) and
 whether to mirror the image. The preview uses the camera only whilst the window
 is showing the setup page, and releases it before recording begins. Escape
-closes the window and Enter starts recording. The choices are
+closes the window and Enter captures a screenshot or starts recording in the
+selected mode. The choices are
 remembered in `$XDG_CONFIG_HOME/sway-easyshot/sway-easyshot.json`
 (`~/.config` when unset).
 
@@ -154,12 +166,16 @@ The window hides whilst recording and returns, showing a result card, once the
 recording ends: a frame from the video, its name, duration, resolution and size,
 with buttons to play it, reveal it in the file manager, copy its path, rename it
 or move it to the bin. "New recording" (or Escape) returns to the setup page.
-Previews and details rely on `ffmpeg` and `ffprobe`.
+Video previews and details rely on `ffmpeg` and `ffprobe`.
 
 Running `sway-easyshot` without a command whilst a recording is in progress stops it and shows the
 window again, so a single key binding suffices. If the key is pressed whilst the recording is still being set up (countdown or region
 selection), the stop is held and applied as soon as recording begins. Monitor
-thumbnails refresh every two seconds whilst the window is visible.
+and window thumbnails refresh every two seconds whilst their source is visible,
+in both Screenshot and Video modes. Window previews show the current on-screen
+area, including any overlapping windows.
+Only visible windows are offered; the capture dialogue and inactive members of
+a tabbed group are excluded. The list updates when the active tab changes.
 Window and monitor listing supports both Hyprland and sway.
 
 The screenshots in this README are rendered by `make screenshots` from a
@@ -167,9 +183,14 @@ The screenshots in this README are rendered by `make screenshots` from a
 desktop content is captured. It requires a Hyprland session, `grim`, `ffmpeg`
 and Pillow.
 
-The dialogue drives the daemon through two additions to the request options,
-which other clients may use as well:
+The dialogue uses the following daemon requests and options, which other
+clients may use as well:
 
+- `screenshot` saves a PNG and returns its path in the response's `file` field.
+  It accepts `delay` and either `output` (a monitor name), `geometry` (in slurp
+  form), or neither for interactive region selection. It does not wait for
+  notification actions. This action is available through the socket protocol;
+  the existing screenshot CLI commands retain their behaviour.
 - `movie-screen` accepts an `output` option naming the output to record,
   bypassing the interactive selection when present.
 - `movie-geometry` is a new action recording the `geometry` option, given in

@@ -142,6 +142,7 @@ func windowsFromHypr(clients, monitors []byte) ([]Window, error) {
 		Address   string `json:"address"`
 		Mapped    bool   `json:"mapped"`
 		Hidden    bool   `json:"hidden"`
+		Visible   *bool  `json:"visible"`
 		At        [2]int `json:"at"`
 		Size      [2]int `json:"size"`
 		Class     string `json:"class"`
@@ -174,7 +175,7 @@ func windowsFromHypr(clients, monitors []byte) ([]Window, error) {
 
 	var ws []Window
 	for _, c := range cs {
-		if !c.Mapped || c.Hidden || c.Size[0] <= 0 || c.Size[1] <= 0 || !visible[c.Workspace.ID] {
+		if !c.Mapped || c.Hidden || (c.Visible != nil && !*c.Visible) || c.Size[0] <= 0 || c.Size[1] <= 0 || !visible[c.Workspace.ID] {
 			continue
 		}
 		ws = append(ws, Window{ID: c.Address, Title: c.Title, Class: c.Class, X: c.At[0], Y: c.At[1], Width: c.Size[0], Height: c.Size[1]})

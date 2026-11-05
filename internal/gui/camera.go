@@ -266,8 +266,6 @@ func (a *app) syncMirror() {
 	}
 }
 
-// updatePreviewBase shows the selected monitor's thumbnail beneath the camera,
-// or a neutral placeholder when there is none to show.
 func (a *app) updatePreviewBase() {
 	if a.prevBase == nil {
 		return
@@ -279,22 +277,26 @@ func (a *app) updatePreviewBase() {
 		}
 	}
 	text := map[string]string{SourceWindow: "Selected window", SourceRegion: "Chosen region"}[src]
+	var pic *gtk.Picture
 	if src == SourceMonitor {
-		if pic := a.thumbs[a.monName]; pic != nil {
-			if p := pic.Paintable(); p != nil {
-				a.prevThumb.SetPaintable(p)
-				a.prevBase.SetVisibleChildName("thumb")
-				return
-			}
-		}
+		pic = a.thumbs[a.monName]
 		text = "Monitor"
+	} else if src == SourceWindow && a.winIdx >= 0 && a.winIdx < len(a.windows) {
+		pic = a.windowThumbs[a.windows[a.winIdx].ID].picture
+	}
+	if pic != nil {
+		if p := pic.Paintable(); p != nil {
+			a.prevThumb.SetPaintable(p)
+			a.prevBase.SetVisibleChildName("thumb")
+			return
+		}
 	}
 	a.prevHolder.SetLabel(text)
 	a.prevBase.SetVisibleChildName("placeholder")
 }
 
 func (a *app) syncCameraRevealer() {
-	a.cameraRevealer.SetRevealChild(a.camera.Active() && len(a.cameras) > 0)
+	a.cameraRevealer.SetRevealChild(a.settings.Mode != ModeScreenshot && a.camera.Active() && len(a.cameras) > 0)
 }
 
 // probeCameras lists cameras off the main thread.
@@ -369,7 +371,7 @@ func (a *app) onCameraSelected() {
 // previewWanted is true only whilst the camera picture is on show: camera on,
 // dialogue visible, setup page showing, no recording under way and not closing.
 func (a *app) previewWanted() bool {
-	return a.camera != nil && a.camera.Active() && a.camera.Visible() && a.camSel != "" &&
+	return a.settings.Mode != ModeScreenshot && a.camera != nil && a.camera.Active() && a.camera.Visible() && a.camSel != "" &&
 		!a.busy && !a.closing && a.win != nil && a.win.Mapped() && a.pages != nil && a.onSetupPage()
 }
 

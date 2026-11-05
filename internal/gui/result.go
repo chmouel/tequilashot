@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"sway-easyshot/internal/external"
+
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
@@ -23,9 +25,6 @@ import (
 const (
 	pageSetup  = "setup"
 	pageResult = "result"
-
-	setupTitle  = "Record screen"
-	resultTitle = "Recording saved"
 )
 
 // resultView holds the widgets and state of the result page.
@@ -33,14 +32,20 @@ type resultView struct {
 	frame   *gtk.Picture
 	name    *gtk.Label
 	caption *gtk.Label
+	open    *adw.ButtonContent
+	again   *gtk.Button
+	images  *gtk.Box
+	actions *gtk.Box
 
 	file string
 	info MediaInfo
+	mode string
 	// gen identifies the shown result so a late preview never lands on a
 	// newer one; it is unaffected by renames.
 	gen int
 	// dialogOpen stops Escape leaving the page whilst a dialogue is on show.
 	dialogOpen bool
+	editing    bool
 }
 
 func (a *app) buildResult() *gtk.Box {
@@ -73,7 +78,11 @@ func (a *app) buildResult() *gtk.Box {
 
 	row := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	row.SetHomogeneous(true)
-	row.Append(action("Play", "media-playback-start-symbolic", a.playResult))
+	open := gtk.NewButton()
+	r.open = adw.NewButtonContent()
+	open.SetChild(r.open)
+	open.ConnectClicked(a.playResult)
+	row.Append(open)
 	row.Append(action("Folder", "folder-symbolic", a.showResultFolder))
 	row.Append(action("Copy path", "edit-copy-symbolic", a.copyResultPath))
 
@@ -93,6 +102,17 @@ func (a *app) buildResult() *gtk.Box {
 	again.SetMarginTop(6)
 	again.SetSizeRequest(200, -1)
 	again.ConnectClicked(a.showSetup)
+	r.again = again
+
+	r.images = gtk.NewBox(gtk.OrientationHorizontal, 8)
+	r.images.SetHomogeneous(true)
+	r.images.Append(action("Copy image", "edit-copy-symbolic", a.copyResultImage))
+	r.images.Append(action("Edit", "document-edit-symbolic", a.editResult))
+	r.actions = gtk.NewBox(gtk.OrientationVertical, 10)
+	r.actions.Append(r.images)
+	r.actions.Append(row)
+	r.actions.Append(row2)
+	r.actions.Append(again)
 
 	page := gtk.NewBox(gtk.OrientationVertical, 10)
 	page.SetMarginTop(8)
@@ -102,9 +122,7 @@ func (a *app) buildResult() *gtk.Box {
 	page.Append(r.frame)
 	page.Append(r.name)
 	page.Append(r.caption)
-	page.Append(row)
-	page.Append(row2)
-	page.Append(again)
+	page.Append(r.actions)
 	return page
 }
 
@@ -113,28 +131,50 @@ func (a *app) onSetupPage() bool {
 }
 
 func (a *app) showSetup() {
+	if a.res.editing {
+		return
+	}
 	a.pages.SetVisibleChildName(pageSetup)
-	a.win.SetTitle(setupTitle)
+	a.win.SetTitle(a.setupTitle())
 	a.refresh()
 	a.updateThumbTimer()
 }
 
-// showResult presents the finished recording and fetches its frame in the background.
-func (a *app) showResult(file string, info MediaInfo) {
+func (a *app) showResult(file string, info MediaInfo, mode string) {
 	r := &a.res
-	r.file, r.info = file, info
+	r.file, r.info, r.mode = file, info, mode
 	r.gen++
 	gen := r.gen
 	r.frame.SetPaintable(nil)
 	a.updateResultLabels()
 	a.stopThumbTimer()
 	a.pages.SetVisibleChildName(pageResult)
-	a.win.SetTitle(resultTitle)
+	image := mode == ModeScreenshot
+	r.images.SetVisible(image)
+	if image {
+		a.win.SetTitle("Screenshot saved")
+		r.frame.SetContentFit(gtk.ContentFitContain)
+		r.open.SetLabel("Open")
+		r.open.SetIconName("document-open-symbolic")
+		r.again.SetLabel("New screenshot")
+	} else {
+		a.win.SetTitle("Recording saved")
+		r.frame.SetContentFit(gtk.ContentFitCover)
+		r.open.SetLabel("Play")
+		r.open.SetIconName("media-playback-start-symbolic")
+		r.again.SetLabel("New recording")
+	}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		data, err := ExtractFrame(ctx, file, info.Duration)
+		var data []byte
+		var err error
+		if image {
+			data, err = os.ReadFile(file) //nolint:gosec
+		} else {
+			data, err = ExtractFrame(ctx, file, info.Duration)
+		}
 		if err != nil {
 			log.Printf("preview frame: %v", err)
 			return
@@ -148,6 +188,58 @@ func (a *app) showResult(file string, info MediaInfo) {
 			}
 		})
 	}()
+}
+
+func (a *app) copyResultImage() {
+	file := a.res.file
+	go func() {
+		data, err := os.ReadFile(file) //nolint:gosec
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err = external.WlCopy(ctx, data, "image/png")
+			cancel()
+		}
+		glib.IdleAdd(func() {
+			if err != nil {
+				a.toast("The image could not be copied: " + err.Error())
+			} else {
+				a.toast("Image copied")
+			}
+		})
+	}()
+}
+
+func (a *app) editResult() {
+	if a.res.editing {
+		return
+	}
+	a.res.editing = true
+	a.res.actions.SetSensitive(false)
+	file := a.res.file
+	go func() {
+		err := external.Satty(context.Background(), file, file, true)
+		info, probeErr := ProbeImage(file)
+		glib.IdleAdd(func() {
+			a.res.editing = false
+			a.res.actions.SetSensitive(true)
+			if probeErr == nil {
+				a.showResult(file, info, ModeScreenshot)
+			}
+			a.win.Present()
+			if err != nil {
+				a.toast("The editor could not finish: " + err.Error())
+			} else if probeErr != nil {
+				a.toast("The screenshot could not be refreshed: " + probeErr.Error())
+			}
+		})
+	}()
+}
+
+func (a *app) resultNoun() string {
+	if a.res.mode == ModeScreenshot {
+		return "screenshot"
+	}
+	return "recording"
 }
 
 func (a *app) updateResultLabels() {
@@ -204,11 +296,11 @@ func (a *app) choose(dlg *adw.AlertDialog, done func(response string)) {
 
 // renameDialog asks for a new name; problem, when set, explains a previous refusal.
 func (a *app) renameDialog(problem string) {
-	body := "The .mp4 extension is kept."
+	body := "The " + filepath.Ext(a.res.file) + " extension is kept."
 	if problem != "" {
 		body = "Regrettably, " + problem + "."
 	}
-	dlg := adw.NewAlertDialog("Rename recording", body)
+	dlg := adw.NewAlertDialog("Rename "+a.resultNoun(), body)
 	dlg.AddResponse("cancel", "Cancel")
 	dlg.AddResponse("rename", "Rename")
 	dlg.SetResponseAppearance("rename", adw.ResponseSuggested)
@@ -239,7 +331,8 @@ func (a *app) renameDialog(problem string) {
 }
 
 func (a *app) confirmDelete() {
-	dlg := adw.NewAlertDialog("Delete this recording?", filepath.Base(a.res.file)+" will be moved to the bin.")
+	noun := a.resultNoun()
+	dlg := adw.NewAlertDialog("Delete this "+noun+"?", filepath.Base(a.res.file)+" will be moved to the bin.")
 	dlg.AddResponse("cancel", "Cancel")
 	dlg.AddResponse("delete", "Delete")
 	dlg.SetResponseAppearance("delete", adw.ResponseDestructive)
@@ -252,13 +345,13 @@ func (a *app) confirmDelete() {
 		}
 		file := a.res.file
 		go func() {
-			msg := "Recording moved to the bin"
+			msg := "The " + noun + " was moved to the bin"
 			if err := gio.NewFileForPath(file).Trash(context.Background()); err != nil {
 				log.Printf("trash %s: %v", file, err)
 				if rerr := os.Remove(file); rerr != nil {
-					msg = fmt.Sprintf("Regrettably, the recording could not be deleted: %v", rerr)
+					msg = fmt.Sprintf("Regrettably, the %s could not be deleted: %v", noun, rerr)
 				} else {
-					msg = "The bin was unavailable; the recording was deleted permanently"
+					msg = "The bin was unavailable; the " + noun + " was deleted permanently"
 				}
 			}
 			glib.IdleAdd(func() {

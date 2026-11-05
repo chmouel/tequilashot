@@ -1,6 +1,47 @@
 package daemon
 
-import "testing"
+import (
+	"encoding/json"
+	"net"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"sway-easyshot/internal/config"
+	"sway-easyshot/pkg/protocol"
+)
+
+func TestScreenshotResponse(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "grim"), []byte("#!/bin/sh\nfor last; do :; done\nprintf png > \"$last\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	d := New(&config.Config{SaveLocation: dir}, false)
+	defer d.cancel()
+	server, client := net.Pipe()
+	defer func() { _ = client.Close() }()
+	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	go d.handleConnection(server)
+	if err := json.NewEncoder(client).Encode(protocol.Request{
+		Command: "execute", Action: "screenshot", Options: map[string]interface{}{"output": "DP-1", "delay": 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var resp protocol.Response
+	if err := json.NewDecoder(client).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Success || resp.File == "" || resp.State == nil || resp.State.Recording || resp.State.RecordingFile != "" {
+		t.Fatalf("unexpected screenshot response: %+v", resp)
+	}
+	if data, err := os.ReadFile(resp.File); err != nil || string(data) != "png" {
+		t.Fatalf("reported screenshot was not saved: %q, %v", data, err)
+	}
+}
 
 func mustParseCamera(t *testing.T, options map[string]any) cameraRequest {
 	t.Helper()

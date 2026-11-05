@@ -10,5 +10,5 @@ import (
 )
 
 func guiAction(_ context.Context, _ *cli.Command) error {
-	return errors.New("the recording dialogue is unavailable: built without GUI support")
+	return errors.New("the capture dialogue is unavailable: built without GUI support")
 }

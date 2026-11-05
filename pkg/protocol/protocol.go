@@ -11,6 +11,7 @@ type Request struct {
 type Response struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
+	File    string `json:"file,omitempty"`
 	State   *State `json:"state,omitempty"`
 }
 

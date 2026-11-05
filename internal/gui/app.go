@@ -1,6 +1,6 @@
 //go:build !nogui
 
-// Package gui implements the GTK4/libadwaita recording dialogue.
+// Package gui implements the GTK4/libadwaita capture dialogue.
 package gui
 
 import (
@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -41,7 +42,7 @@ type Backend struct {
 	SendStart func(protocol.Request) (*protocol.Response, error)
 }
 
-// thumbInterval is how often visible monitor thumbnails are refreshed.
+// thumbInterval is how often visible thumbnails are refreshed.
 const thumbInterval = 2 * time.Second
 
 const css = `
@@ -70,6 +71,11 @@ type app struct {
 	res          resultView
 	settings     Settings
 	settingsPath string
+	startButton  *gtk.Button
+	audioSection *gtk.Box
+	cropRow      *gtk.Box
+	regionHint   *gtk.Label
+	windowHint   *gtk.Label
 
 	srcButtons  map[string]*gtk.ToggleButton
 	stack       *gtk.Stack
@@ -122,9 +128,11 @@ type app struct {
 	winIdx   int
 	monName  string
 
-	thumbs     map[string]*gtk.Picture
-	inflight   map[string]bool
-	thumbTimer glib.SourceHandle
+	thumbs           map[string]*gtk.Picture
+	inflight         map[string]bool
+	thumbTimer       glib.SourceHandle
+	windowThumbs     map[string]windowThumbnail
+	windowRefreshing bool
 
 	busy    bool
 	started bool
@@ -135,18 +143,27 @@ type app struct {
 	stopLatched bool
 }
 
+type windowThumbnail struct {
+	frame   *gtk.Stack
+	picture *gtk.Picture
+}
+
 // Data sources and staging hooks; the demo build swaps them for staged
 // content so documentation screenshots never show a real desktop.
 var (
-	listMonitors  = sway.ListMonitors
-	listWindows   = sway.ListWindows
+	listMonitors = sway.ListMonitors
+	listWindows  = func(ctx context.Context) ([]sway.Window, error) {
+		wins, err := sway.ListWindows(ctx)
+		return slices.DeleteFunc(wins, func(w sway.Window) bool { return w.Class == appID }), err
+	}
 	grabThumbnail = func(ctx context.Context, output string) ([]byte, error) {
 		return exec.CommandContext(ctx, "grim", "-o", output, "-s", "0.1", "-t", "jpeg", "-q", "70", "-").Output() //nolint:gosec
 	}
-	// recordingDisabled is set by the demo build so that it can never record.
-	recordingDisabled bool
-	demoSettings      func(*Settings) bool
-	demoStage         func(*app)
+	grabWindowThumbnail = captureWindowPreview
+	// The demo build must not capture real desktop content
+	captureDisabled bool
+	demoSettings    func(*Settings) bool
+	demoStage       func(*app)
 )
 
 // Run opens the dialogue and blocks until the application exits.
@@ -167,7 +184,7 @@ func Run(b Backend) error {
 		log.Print("camera preview did not exit in time")
 	}
 	if code != 0 {
-		return fmt.Errorf("recording dialogue exited with status %d", code)
+		return fmt.Errorf("capture dialogue exited with status %d", code)
 	}
 	return nil
 }
@@ -183,6 +200,9 @@ func (a *app) activate() {
 	}
 
 	if a.busy {
+		if a.settings.Mode == ModeScreenshot {
+			return
+		}
 		// A second launch acts as a stop key. Whilst the start is still
 		// pending there is nothing to stop yet, so the request is latched.
 		a.mu.Lock()
@@ -193,6 +213,10 @@ func (a *app) activate() {
 		}
 		a.mu.Unlock()
 		go a.stopRecording()
+		return
+	}
+	if a.res.editing {
+		a.win.Present()
 		return
 	}
 
@@ -226,6 +250,9 @@ func (a *app) stopRecording() {
 }
 
 func (a *app) state() *protocol.State {
+	if captureDisabled {
+		return nil
+	}
 	resp, err := a.b.Send(protocol.Request{Command: "execute", Action: "waybar-status"})
 	if err != nil || resp == nil {
 		return nil
@@ -252,7 +279,7 @@ func (a *app) build() {
 	}
 
 	a.win = adw.NewApplicationWindow(&a.gtkApp.Application)
-	a.win.SetTitle(setupTitle)
+	a.win.SetTitle(a.setupTitle())
 	a.win.SetDefaultSize(520, -1)
 	// A fixed-size window is floated by tiling compositors, keeping the dialogue compact.
 	a.win.SetResizable(false)
@@ -280,6 +307,9 @@ func (a *app) build() {
 	key.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
 		switch keyval {
 		case gdk.KEY_Escape:
+			if a.res.editing {
+				return true
+			}
 			if a.res.dialogOpen {
 				return false
 			}
@@ -293,7 +323,7 @@ func (a *app) build() {
 			if !a.onSetupPage() {
 				return false
 			}
-			a.startRecording()
+			a.startCapture()
 			return true
 		}
 		return false
@@ -309,8 +339,10 @@ func (a *app) build() {
 
 	body.Append(section("Source"))
 	body.Append(a.buildSource())
-	body.Append(section("Audio & camera"))
-	body.Append(a.buildAudio())
+	a.audioSection = gtk.NewBox(gtk.OrientationVertical, 14)
+	a.audioSection.Append(section("Audio & camera"))
+	a.audioSection.Append(a.buildAudio())
+	body.Append(a.audioSection)
 	body.Append(section("Countdown"))
 	body.Append(a.buildCountdown())
 
@@ -320,7 +352,8 @@ func (a *app) build() {
 	rec.SetHAlign(gtk.AlignCenter)
 	rec.SetMarginTop(6)
 	rec.SetSizeRequest(200, -1)
-	rec.ConnectClicked(a.startRecording)
+	rec.ConnectClicked(a.startCapture)
+	a.startButton = rec
 	body.Append(rec)
 
 	a.pages = gtk.NewStack()
@@ -341,6 +374,68 @@ func (a *app) build() {
 	root.Append(adw.NewHeaderBar())
 	root.Append(a.toasts)
 	a.win.SetContent(root)
+	body.Prepend(a.buildMode())
+	a.updateMode()
+}
+
+func (a *app) setupTitle() string {
+	if a.settings.Mode == ModeScreenshot {
+		return "Capture screen"
+	}
+	return "Record screen"
+}
+
+func (a *app) buildMode() *gtk.Box {
+	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	box.AddCSSClass("linked")
+	box.SetHAlign(gtk.AlignCenter)
+	var first *gtk.ToggleButton
+	for _, mode := range []struct{ id, title string }{{ModeScreenshot, "Screenshot"}, {ModeVideo, "Video"}} {
+		b := gtk.NewToggleButtonWithLabel(mode.title)
+		if first == nil {
+			first = b
+		} else {
+			b.SetGroup(first)
+		}
+		b.SetActive(a.settings.Mode == mode.id)
+		b.ConnectToggled(func() {
+			if b.Active() {
+				a.settings.Mode = mode.id
+				a.updateMode()
+				a.saveSettings(a.collect())
+			}
+		})
+		box.Append(b)
+	}
+	return box
+}
+
+func (a *app) updateMode() {
+	video := a.settings.Mode != ModeScreenshot
+	a.audioSection.SetVisible(video)
+	a.cropRow.SetVisible(video)
+	a.cameraRevealer.SetVisible(video)
+	if video {
+		a.startButton.SetLabel("Record")
+		a.regionHint.SetText("You will be asked to drag out an area once you press Record.")
+		a.windowHint.SetText("A window is recorded as its present on-screen area; moving it will not be followed.")
+	} else {
+		a.startButton.SetLabel("Capture")
+		a.regionHint.SetText("You will be asked to drag out an area once you press Capture.")
+		a.windowHint.SetText("The selected window's present on-screen area will be captured.")
+	}
+	a.win.SetTitle(a.setupTitle())
+	a.syncCameraRevealer()
+	a.syncPreview()
+}
+
+func (a *app) saveSettings(s Settings) {
+	a.settings = s
+	if a.settingsPath != "" {
+		if err := SaveSettings(a.settingsPath, s); err != nil {
+			log.Printf("saving settings: %v", err)
+		}
+	}
 }
 
 func (a *app) buildSource() *gtk.Box {
@@ -363,6 +458,9 @@ func (a *app) buildSource() *gtk.Box {
 			if b.Active() {
 				a.stack.SetVisibleChildName(id)
 				a.updateThumbTimer()
+				if id == SourceWindow {
+					a.refreshWindowThumbs()
+				}
 				a.updatePreviewBase()
 			}
 		})
@@ -378,6 +476,7 @@ func (a *app) buildSource() *gtk.Box {
 	hint.SetWrap(true)
 	hint.SetMarginTop(12)
 	hint.SetMarginBottom(12)
+	a.regionHint = hint
 	a.stack.AddNamed(hint, SourceRegion)
 	box.Append(a.stack)
 
@@ -412,6 +511,7 @@ func (a *app) buildMonitorPage() *gtk.Box {
 	a.crop = gtk.NewSpinButtonWithRange(0, 500, 1)
 	a.crop.SetValue(float64(a.settings.CropTop))
 	row.Append(a.crop)
+	a.cropRow = row
 	page.Append(row)
 	return page
 }
@@ -427,6 +527,7 @@ func (a *app) buildWindowPage() *gtk.Box {
 		if row != nil {
 			a.winIdx = row.Index()
 		}
+		a.updatePreviewBase()
 	})
 
 	sc := gtk.NewScrolledWindow()
@@ -437,7 +538,9 @@ func (a *app) buildWindowPage() *gtk.Box {
 	sc.SetChild(a.winList)
 	page.Append(sc)
 
-	page.Append(label("A window is recorded as its present on-screen area; moving it will not be followed.", "dim-label", "caption"))
+	a.windowHint = label("", "dim-label", "caption")
+	a.windowHint.SetWrap(true)
+	page.Append(a.windowHint)
 	return page
 }
 
@@ -507,6 +610,7 @@ func (a *app) buildCountdown() *gtk.Box {
 
 func (a *app) collect() Settings {
 	s := Settings{
+		Mode:    a.settings.Mode,
 		Source:  SourceMonitor,
 		Monitor: a.monName,
 		CropTop: a.crop.ValueAsInt(),
@@ -616,7 +720,7 @@ func (a *app) setMonitors(mons []sway.Monitor) {
 // another capture of the same output. It is skipped once the dialogue is
 // hidden so a late refresh cannot run grim during a recording.
 func (a *app) captureThumb(output string) {
-	if a.inflight[output] || !a.thumbsWanted() {
+	if a.inflight[output] || !a.thumbsWanted() || a.stack.VisibleChildName() != SourceMonitor {
 		return
 	}
 	a.inflight[output] = true
@@ -641,7 +745,8 @@ func (a *app) captureThumb(output string) {
 }
 
 func (a *app) thumbsWanted() bool {
-	return a.win != nil && a.win.IsVisible() && a.onSetupPage() && a.stack.VisibleChildName() == SourceMonitor
+	return !a.busy && !a.closing && a.win != nil && a.win.IsVisible() && a.onSetupPage() &&
+		(a.stack.VisibleChildName() == SourceMonitor || a.stack.VisibleChildName() == SourceWindow)
 }
 
 // updateThumbTimer runs the refresh timer only whilst thumbnails are on show.
@@ -654,11 +759,81 @@ func (a *app) updateThumbTimer() {
 			a.thumbTimer = 0
 			return false
 		}
-		for name := range a.thumbs {
-			a.captureThumb(name)
+		if a.stack.VisibleChildName() == SourceWindow {
+			a.refreshWindowThumbs()
+		} else {
+			for name := range a.thumbs {
+				a.captureThumb(name)
+			}
 		}
 		return true
 	})
+}
+
+func (a *app) refreshWindowThumbs() {
+	if a.windowRefreshing || !a.thumbsWanted() || a.stack.VisibleChildName() != SourceWindow {
+		return
+	}
+	a.windowRefreshing = true
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		wins, err := listWindows(ctx)
+		glib.IdleAdd(func() {
+			a.windowRefreshing = false
+			if err != nil || !a.thumbsWanted() || a.stack.VisibleChildName() != SourceWindow {
+				return
+			}
+			changed := len(wins) != len(a.windows)
+			if !changed {
+				for i, w := range wins {
+					if w.ID != a.windows[i].ID {
+						changed = true
+						break
+					}
+				}
+			}
+			if changed {
+				a.setWindows(wins)
+			}
+			for _, w := range wins {
+				a.captureWindowThumb(w)
+			}
+			a.updatePreviewBase()
+		})
+	}()
+}
+
+func (a *app) captureWindowThumb(w sway.Window) {
+	thumb, ok := a.windowThumbs[w.ID]
+	key := "window:" + w.ID
+	if !ok || a.inflight[key] || !a.thumbsWanted() || a.stack.VisibleChildName() != SourceWindow {
+		return
+	}
+	a.inflight[key] = true
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		data, err := grabWindowThumbnail(ctx, w)
+		glib.IdleAdd(func() {
+			delete(a.inflight, key)
+			// A list refresh replaces the row, even when the window ID is unchanged
+			if a.windowThumbs[w.ID].picture != thumb.picture || !a.thumbsWanted() || a.stack.VisibleChildName() != SourceWindow {
+				return
+			}
+			if err == nil {
+				if tex, texErr := gdk.NewTextureFromBytes(glib.NewBytes(data)); texErr == nil {
+					thumb.picture.SetPaintable(tex)
+					thumb.frame.SetVisibleChildName("image")
+					a.updatePreviewBase()
+					return
+				}
+			}
+			thumb.picture.SetPaintable(nil)
+			thumb.frame.SetVisibleChildName("icon")
+			a.updatePreviewBase()
+		})
+	}()
 }
 
 func (a *app) stopThumbTimer() {
@@ -669,9 +844,14 @@ func (a *app) stopThumbTimer() {
 }
 
 func (a *app) setWindows(wins []sway.Window) {
+	selected := ""
+	if a.winIdx >= 0 && a.winIdx < len(a.windows) {
+		selected = a.windows[a.winIdx].ID
+	}
 	a.windows = wins
 	a.winIdx = -1
 	a.winList.RemoveAll()
+	a.windowThumbs = make(map[string]windowThumbnail, len(wins))
 
 	var theme *gtk.IconTheme
 	if display := gdk.DisplayGetDefault(); display != nil {
@@ -687,10 +867,28 @@ func (a *app) setWindows(wins []sway.Window) {
 		row.SetTitle(glib.MarkupEscapeText(title))
 		row.SetTitleLines(1)
 		row.SetSubtitle(glib.MarkupEscapeText(fmt.Sprintf("%s · %d × %d", w.Class, w.Width, w.Height)))
+		row.SetSubtitleLines(1)
 		img := gtk.NewImageFromIconName(iconFor(theme, w.Class))
 		img.SetPixelSize(32)
-		row.AddPrefix(img)
+		pic := gtk.NewPicture()
+		pic.SetContentFit(gtk.ContentFitContain)
+		pic.SetCanShrink(true)
+		pic.SetSizeRequest(windowPreviewWidth, windowPreviewHeight)
+		frame := gtk.NewStack()
+		frame.AddCSSClass("er-thumb")
+		frame.SetOverflow(gtk.OverflowHidden)
+		frame.SetSizeRequest(windowPreviewWidth, windowPreviewHeight)
+		frame.SetVAlign(gtk.AlignCenter)
+		frame.AddNamed(img, "icon")
+		frame.AddNamed(pic, "image")
+		frame.SetVisibleChildName("icon")
+		row.AddPrefix(frame)
 		a.winList.Append(row)
+		a.windowThumbs[w.ID] = windowThumbnail{frame: frame, picture: pic}
+		if w.ID == selected {
+			a.winList.SelectRow(&row.ListBoxRow)
+		}
+		a.captureWindowThumb(w)
 	}
 }
 
@@ -710,16 +908,16 @@ func lastDotted(class string) string {
 	return strings.ToLower(class[strings.LastIndex(class, ".")+1:])
 }
 
-func (a *app) startRecording() {
+func (a *app) startCapture() {
 	if a.busy || a.closing {
 		return
 	}
-	if a.mic.Active() && a.micSel != "" && !a.micsKnown {
+	if a.settings.Mode != ModeScreenshot && a.mic.Active() && a.micSel != "" && !a.micsKnown {
 		a.toast("Checking the microphones; please press Record again in a moment")
 		return
 	}
-	if recordingDisabled {
-		a.toast("Demo mode: recording is disabled")
+	if captureDisabled {
+		a.toast("Demo mode: capture is disabled")
 		return
 	}
 	s := a.collect()
@@ -741,13 +939,10 @@ func (a *app) startRecording() {
 		return
 	}
 
-	if a.settingsPath != "" {
-		if err := SaveSettings(a.settingsPath, s); err != nil {
-			log.Printf("saving settings: %v", err)
-		}
+	a.saveSettings(s)
+	if s.Mode != ModeScreenshot {
+		req.Options["quiet_finish"] = true
 	}
-
-	req.Options["quiet_finish"] = true
 
 	a.busy = true
 	a.mu.Lock()
@@ -790,7 +985,9 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	}
 
 	resp, err := a.b.SendStart(req)
-	if err == nil && !resp.Success {
+	if err == nil && resp == nil {
+		err = errors.New("the daemon did not respond")
+	} else if err == nil && !resp.Success {
 		err = errors.New(resp.Message)
 	}
 	a.mu.Lock()
@@ -800,6 +997,18 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	a.mu.Unlock()
 	if err != nil {
 		a.finish(nil, err)
+		return
+	}
+	if req.Action == "screenshot" {
+		if resp.File == "" {
+			a.finish(nil, errors.New("the daemon did not report a screenshot file"))
+			return
+		}
+		info, err := ProbeImage(resp.File)
+		if err != nil {
+			log.Printf("inspect %s: %v", resp.File, err)
+		}
+		a.finish(&savedCapture{file: resp.File, info: info, mode: ModeScreenshot}, nil)
 		return
 	}
 
@@ -850,15 +1059,16 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 			info.Size = st.Size()
 		}
 	}
-	a.finish(&savedRecording{file: file, info: info}, nil)
+	a.finish(&savedCapture{file: file, info: info, mode: ModeVideo}, nil)
 }
 
-type savedRecording struct {
+type savedCapture struct {
 	file string
 	info MediaInfo
+	mode string
 }
 
-func (a *app) finish(saved *savedRecording, err error) {
+func (a *app) finish(saved *savedCapture, err error) {
 	a.mu.Lock()
 	a.pending = false
 	a.mu.Unlock()
@@ -868,9 +1078,13 @@ func (a *app) finish(saved *savedRecording, err error) {
 		a.win.Present()
 		if err != nil {
 			a.showSetup()
-			a.toast("Regrettably, the recording failed: " + err.Error())
+			kind := "recording"
+			if a.settings.Mode == ModeScreenshot {
+				kind = "screenshot"
+			}
+			a.toast("Regrettably, the " + kind + " failed: " + err.Error())
 			return
 		}
-		a.showResult(saved.file, saved.info)
+		a.showResult(saved.file, saved.info, saved.mode)
 	})
 }

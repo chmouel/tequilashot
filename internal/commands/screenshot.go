@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,54 @@ type ScreenshotHandler struct {
 // NewScreenshotHandler creates a new screenshot handler instance.
 func NewScreenshotHandler(cfg *config.Config, st *state.State) *ScreenshotHandler {
 	return &ScreenshotHandler{cfg: cfg, state: st}
+}
+
+var screenshotGeometry = regexp.MustCompile(`^-?\d+,-?\d+ [1-9]\d*x[1-9]\d*$`)
+
+// Capture returns a saved PNG without offering notification actions
+func (h *ScreenshotHandler) Capture(ctx context.Context, delay int, output, geometry string) (string, error) {
+	if output != "" && geometry != "" {
+		return "", fmt.Errorf("select either an output or a geometry")
+	}
+	if geometry != "" && !screenshotGeometry.MatchString(geometry) {
+		return "", fmt.Errorf("invalid geometry %q, expected \"X,Y WxH\"", geometry)
+	}
+	if output == "" && geometry == "" {
+		var err error
+		geometry, err = external.Slurp(ctx, "")
+		if err != nil {
+			return "", fmt.Errorf("selection cancelled or failed: %w", err)
+		}
+		if geometry == "" {
+			return "", fmt.Errorf("selection cancelled or failed")
+		}
+		if !screenshotGeometry.MatchString(geometry) {
+			return "", fmt.Errorf("invalid selection geometry %q", geometry)
+		}
+	}
+	if err := notify.CaptureDelay(delay, "screenshot", h.cfg.ScreenshotIcon); err != nil {
+		return "", err
+	}
+	sleepWithCountdown(h.state, delay)
+
+	file := h.cfg.GenerateFilename()
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec
+	if os.IsExist(err) {
+		f, err = os.CreateTemp(h.cfg.SaveLocation, strings.TrimSuffix(filepath.Base(file), ".png")+"-*.png")
+	}
+	if err != nil {
+		return "", err
+	}
+	file = f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(file)
+		return "", err
+	}
+	if _, err := external.Grim(ctx, geometry, output, file); err != nil {
+		_ = os.Remove(file)
+		return "", fmt.Errorf("failed to capture screenshot: %w", err)
+	}
+	return file, nil
 }
 
 // sleepWithCountdown sleeps for the given delay while updating the countdown state

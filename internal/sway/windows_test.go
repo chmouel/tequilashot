@@ -32,6 +32,22 @@ func TestWindowsFromSway(t *testing.T) {
 	}
 }
 
+func TestWindowsFromHyprTabbedGroup(t *testing.T) {
+	clients := []byte(`[
+{"address":"0x1","mapped":true,"hidden":false,"visible":false,"at":[7,72],"size":[3826,2081],"class":"kitty","workspace":{"id":1},"grouped":["0x1","0x2"]},
+{"address":"0x2","mapped":true,"hidden":false,"visible":true,"at":[7,72],"size":[3826,2081],"class":"pavucontrol","workspace":{"id":1},"grouped":["0x1","0x2"]}
+]
+`)
+	monitors := []byte(`[{"activeWorkspace":{"id":1}}]`)
+	wins, err := windowsFromHypr(clients, monitors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wins) != 1 || wins[0].ID != "0x2" {
+		t.Fatalf("inactive group members must not share the active tab's preview: %+v", wins)
+	}
+}
+
 func TestMonitorsOrdered(t *testing.T) {
 	ms, err := monitorsFromHypr([]byte(`[{"name":"B","x":0,"y":2160,"width":1920,"height":1080},{"name":"A","x":0,"y":0,"width":3840,"height":2160}]`))
 	if err != nil || len(ms) != 2 || ms[0].Name != "A" {

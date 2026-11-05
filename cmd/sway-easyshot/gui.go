@@ -14,7 +14,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// guiAction opens the recording dialogue; it is the default action.
 func guiAction(_ context.Context, _ *cli.Command) error {
 	cfg, err := config.Load()
 	if err != nil {

@@ -16,16 +16,16 @@ import (
 
 // The demo build stages the dialogue for documentation screenshots:
 //
-//	SWAY_EASYSHOT_DEMO=monitor|window|region|result
-//	SWAY_EASYSHOT_DEMO_DIR=dir holding DP-1.jpg, HDMI-A-1.jpg, camera.jpg and the demoClip recording
+//	SWAY_EASYSHOT_DEMO=monitor|window|region|result|screenshot|screenshot-window|screenshot-result
+//	SWAY_EASYSHOT_DEMO_DIR=dir holding DP-1.jpg, HDMI-A-1.jpg, camera.jpg, window-1.jpg to window-4.jpg, screenshot.png and the demoClip recording
 //
 // Nothing is read from or written to the real desktop or settings.
 const demoClip = "recording-20261105-13h04.mp4"
 
 func init() {
-	// A demo binary never touches the webcam nor records, staged or not.
+	// A demo binary never touches the webcam or captures the desktop, staged or not
 	dir := os.Getenv("SWAY_EASYSHOT_DEMO_DIR")
-	recordingDisabled = true
+	captureDisabled = true
 	listCameraModes = func(context.Context) ([]external.CameraMode, error) {
 		return []external.CameraMode{{Device: "/dev/video0", Width: 1280, Height: 720, FPS: 30, Format: "mjpeg"}}, nil
 	}
@@ -69,12 +69,19 @@ func init() {
 	grabThumbnail = func(_ context.Context, output string) ([]byte, error) {
 		return os.ReadFile(filepath.Join(dir, output+".jpg"))
 	}
+	grabWindowThumbnail = func(_ context.Context, w sway.Window) ([]byte, error) {
+		return os.ReadFile(filepath.Join(dir, "window-"+w.ID+".jpg"))
+	}
 
 	demoSettings = func(s *Settings) bool {
 		*s = DefaultSettings()
 		s.Monitor, s.Mic, s.Countdown = "DP-1", true, 3
 		s.MicDevice = "studio-microphone"
 		switch page {
+		case "screenshot", "screenshot-result":
+			s.Mode = ModeScreenshot
+		case "screenshot-window":
+			s.Mode, s.Source = ModeScreenshot, SourceWindow
 		case SourceWindow, SourceRegion:
 			s.Source = page
 		case SourceMonitor:
@@ -87,7 +94,7 @@ func init() {
 	demoStage = func(a *app) {
 		glib.TimeoutAdd(800, func() bool {
 			switch page {
-			case SourceWindow:
+			case SourceWindow, "screenshot-window":
 				if row := a.winList.RowAtIndex(1); row != nil {
 					a.winList.SelectRow(row)
 				}
@@ -97,7 +104,12 @@ func init() {
 				info, err := ProbeMedia(ctx, clip)
 				cancel()
 				if err == nil {
-					a.showResult(clip, info)
+					a.showResult(clip, info, ModeVideo)
+				}
+			case "screenshot-result":
+				file := filepath.Join(dir, "screenshot.png")
+				if info, err := ProbeImage(file); err == nil {
+					a.showResult(file, info, ModeScreenshot)
 				}
 			}
 			return false

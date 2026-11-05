@@ -24,7 +24,7 @@ import (
 func main() {
 	cmd := &cli.Command{
 		Name:  "sway-easyshot",
-		Usage: "Recording and screenshot utility for sway; without a command, opens the recording dialogue",
+		Usage: "Recording and screenshot utility for sway; without a command, opens the capture dialogue",
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.Args().Present() {
 				return fmt.Errorf("unknown command %q", c.Args().First())

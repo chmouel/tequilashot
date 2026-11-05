@@ -186,11 +186,15 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	}
 
 	var err error
+	var file string
 
 	opts := commands.RecordOptions{Audio: audio, UseCamera: camera.enabled, Camera: camera.overlay}
 
 	switch req.Action {
 	// Screenshot commands
+	case "screenshot":
+		file, err = d.screenshotHandler.Capture(ctx, delay, output, geometry)
+
 	case "current-window-clipboard":
 		err = d.screenshotHandler.CurrentWindowClipboard(ctx, delay)
 
@@ -301,6 +305,7 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	return protocol.Response{
 		Success: true,
 		Message: "Command executed successfully",
+		File:    file,
 		State:   d.state.GetState(),
 	}
 }

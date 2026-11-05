@@ -11,8 +11,11 @@ import (
 	"sway-easyshot/pkg/protocol"
 )
 
-// Source kinds selectable in the dialogue.
+// Capture modes and source kinds selectable in the dialogue
 const (
+	ModeVideo      = "video"
+	ModeScreenshot = "screenshot"
+
 	SourceMonitor = "monitor"
 	SourceWindow  = "window"
 	SourceRegion  = "region"
@@ -20,6 +23,7 @@ const (
 
 // Settings holds the choices remembered between launches.
 type Settings struct {
+	Mode      string `json:"mode"`
 	Source    string `json:"source"`
 	Monitor   string `json:"monitor"`
 	CropTop   int    `json:"crop_top"`
@@ -38,6 +42,7 @@ type Settings struct {
 // DefaultSettings returns the settings used on first launch.
 func DefaultSettings() Settings {
 	return Settings{
+		Mode:           ModeVideo,
 		Source:         SourceMonitor,
 		Desktop:        true,
 		CameraPosition: external.CameraBottomRight,
@@ -68,6 +73,9 @@ func LoadSettings(path string) Settings {
 	}
 	if err := json.Unmarshal(data, &s); err != nil {
 		return DefaultSettings()
+	}
+	if s.Mode != ModeVideo && s.Mode != ModeScreenshot {
+		s.Mode = ModeVideo
 	}
 	switch s.Source {
 	case SourceMonitor, SourceWindow, SourceRegion:
@@ -127,7 +135,7 @@ func SaveSettings(path string, s Settings) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-// Selection is the concrete target chosen for a recording.
+// Selection is the concrete target chosen for a capture
 type Selection struct {
 	Monitor  string
 	Geometry string
@@ -137,6 +145,25 @@ type Selection struct {
 
 // BuildRequest converts the dialogue choices into a daemon request.
 func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
+	if s.Mode == ModeScreenshot {
+		req := protocol.Request{Command: "execute", Action: "screenshot", Options: map[string]interface{}{"delay": s.Countdown}}
+		switch s.Source {
+		case SourceMonitor:
+			if sel.Monitor == "" {
+				return req, errors.New("no monitor selected")
+			}
+			req.Options["output"] = sel.Monitor
+		case SourceWindow:
+			if sel.Geometry == "" {
+				return req, errors.New("no window selected")
+			}
+			req.Options["geometry"] = sel.Geometry
+		case SourceRegion:
+		default:
+			return req, errors.New("unknown source " + s.Source)
+		}
+		return req, nil
+	}
 	opts := map[string]interface{}{
 		"delay": s.Countdown,
 		"audio": s.Desktop,

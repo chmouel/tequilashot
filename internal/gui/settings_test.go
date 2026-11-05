@@ -11,6 +11,7 @@ import (
 func TestSettingsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "sway-easyshot.json")
 	want := Settings{
+		Mode:   ModeScreenshot,
 		Source: SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,
 		Camera: true, CameraDevice: "/dev/video2", CameraPosition: "top-left", CameraSize: "large", CameraMirror: true,
 	}
@@ -19,6 +20,60 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 	if got := LoadSettings(path); got != want {
 		t.Fatalf("got %+v want %+v", got, want)
+	}
+}
+
+func TestLoadSettingsMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	for _, tc := range []struct{ data, mode string }{
+		{`{"source":"region","desktop_audio":false,"countdown":5}`, ModeVideo},
+		{`{"mode":"unknown","source":"region","desktop_audio":false,"countdown":5}`, ModeVideo},
+		{`{"mode":"screenshot","source":"region","desktop_audio":false,"countdown":5}`, ModeScreenshot},
+	} {
+		if err := os.WriteFile(path, []byte(tc.data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		s := LoadSettings(path)
+		if s.Mode != tc.mode || s.Source != SourceRegion || s.Desktop || s.Countdown != 5 {
+			t.Fatalf("settings not preserved: %+v", s)
+		}
+	}
+}
+
+func TestBuildScreenshotRequest(t *testing.T) {
+	s := DefaultSettings()
+	s.Mode, s.Mic, s.Camera, s.CropTop, s.Countdown = ModeScreenshot, true, true, 40, 5
+	s.MicDevice = "alsa_input.x"
+	for _, tc := range []struct {
+		source        string
+		sel           Selection
+		option, value string
+	}{
+		{SourceMonitor, Selection{Monitor: "DP-1", CameraDevice: "/dev/video0"}, "output", "DP-1"},
+		{SourceWindow, Selection{Geometry: "-100,20 800x600"}, "geometry", "-100,20 800x600"},
+		{SourceRegion, Selection{}, "", ""},
+	} {
+		s.Source = tc.source
+		req, err := BuildRequest(s, tc.sel)
+		if err != nil || req.Action != "screenshot" || req.Command != "execute" || req.Options["delay"] != 5 {
+			t.Fatalf("%s: %+v, %v", tc.source, req, err)
+		}
+		wantLen := 1
+		if tc.option != "" {
+			wantLen++
+			if req.Options[tc.option] != tc.value {
+				t.Fatalf("%s: wrong target: %+v", tc.source, req)
+			}
+		}
+		if len(req.Options) != wantLen {
+			t.Fatalf("%s: unexpected capture options: %+v", tc.source, req.Options)
+		}
+	}
+	for _, source := range []string{SourceMonitor, SourceWindow, "unknown"} {
+		s.Source = source
+		if _, err := BuildRequest(s, Selection{}); err == nil {
+			t.Errorf("expected error for %s without a target", source)
+		}
 	}
 }
 
