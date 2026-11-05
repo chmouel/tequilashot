@@ -68,7 +68,7 @@ Install the runtime tools listed below for the features you use.
 | [FFmpeg](https://ffmpeg.org/) | Processing recordings and video previews |
 
 [Satty](https://github.com/gabm/satty) opens screenshots for editing.
-`aichat` can provide AI-generated filenames. A file manager and `fd` are used
+[aichat](https://github.com/sigoden/aichat) can provide AI-generated filenames. A file manager and `fd` are used
 for optional reveal and cleanup actions.
 
 ## Use the CLI
