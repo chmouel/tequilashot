@@ -109,10 +109,10 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	sizeRow.SetTitle("Size")
 	sizeRow.AddSuffix(sizes)
 
-	shapeRow := adw.NewActionRow()
-	shapeRow.SetTitle("Shape")
-	shapeRow.SetSubtitle("A circle is shown on screen and recorded with it")
-	shapeRow.AddSuffix(shapes)
+	a.shapeRow = adw.NewActionRow()
+	a.shapeRow.SetTitle("Shape")
+	a.shapeRow.SetSubtitle("A circle is shown on screen and recorded with it")
+	a.shapeRow.AddSuffix(shapes)
 
 	a.mirror = adw.NewSwitchRow()
 	a.mirror.SetTitle("Mirror")
@@ -124,7 +124,7 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	list.AddCSSClass("boxed-list")
 	list.Append(a.camRow)
 	list.Append(sizeRow)
-	list.Append(shapeRow)
+	list.Append(a.shapeRow)
 	list.Append(a.mirror)
 
 	a.cameraBox = gtk.NewBox(gtk.OrientationVertical, 14)
@@ -213,7 +213,7 @@ func (a *app) buildLayoutPreview() *gtk.Box {
 		}
 		cx, cy, cw, ch := external.ContainRect(fw, fh, a.previewAspect())
 		var x, y, w, h float64
-		if a.camShape == external.CameraCircle {
+		if a.round() {
 			x, y, w = external.CircleLayout(cw, ch, a.camSize, a.camPos)
 			h = w
 		} else {
@@ -295,12 +295,18 @@ func (a *app) previewAspect() float64 {
 	return 0
 }
 
+// round reports whether the camera is shown as a circle; the virtual camera
+// always uses one.
+func (a *app) round() bool {
+	return a.camShape == external.CameraCircle || a.settings.Mode == ModeCamera
+}
+
 // syncShape rounds the camera tile in the layout preview to match the shape.
 func (a *app) syncShape() {
 	if a.camTile == nil {
 		return
 	}
-	if a.camShape == external.CameraCircle {
+	if a.round() {
 		a.camTile.AddCSSClass("er-round")
 	} else {
 		a.camTile.RemoveCSSClass("er-round")

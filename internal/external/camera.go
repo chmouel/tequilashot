@@ -234,13 +234,14 @@ func rate(m *CameraMode) int {
 	return r
 }
 
-// ListCameraModes returns every capture mode gpu-screen-recorder reports for webcams.
+// ListCameraModes returns every capture mode gpu-screen-recorder reports for
+// webcams, leaving out v4l2loopback devices such as the virtual camera.
 func ListCameraModes(ctx context.Context) ([]CameraMode, error) {
 	out, err := exec.CommandContext(ctx, "gpu-screen-recorder", "--list-v4l2-devices").Output() //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("failed to list cameras: %w", err)
 	}
-	return ParseCameraModes(string(out)), nil
+	return withoutDevices(ParseCameraModes(string(out)), LoopbackDevices()), nil
 }
 
 // CameraDevices returns the distinct devices in modes, in listing order.

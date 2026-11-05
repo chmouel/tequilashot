@@ -74,6 +74,8 @@ type app struct {
 	settingsPath string
 	startButton  *gtk.Button
 	audioSection *gtk.Box
+	audioTitle   *gtk.Label
+	countdownBox *gtk.Box
 	cropRow      *gtk.Box
 	regionHint   *gtk.Label
 	windowHint   *gtk.Label
@@ -108,6 +110,7 @@ type app struct {
 	camPos         string
 	camSize        string
 	camShape       string
+	shapeRow       *adw.ActionRow
 
 	prevOverlay *gtk.Overlay
 	prevBase    *gtk.Stack
@@ -213,7 +216,11 @@ func (a *app) activate() {
 			return
 		}
 		a.mu.Unlock()
-		go a.stopRecording()
+		if a.settings.Mode == ModeCamera {
+			go a.stopVirtualCamera()
+		} else {
+			go a.stopRecording()
+		}
 		return
 	}
 	if a.res.editing {
@@ -230,6 +237,8 @@ func (a *app) activate() {
 				}
 				time.Sleep(200 * time.Millisecond)
 			}
+		} else if st != nil && st.VirtualCamera {
+			a.stopVirtualCamera()
 		}
 		glib.IdleAdd(func() {
 			a.win.Present()
@@ -247,6 +256,18 @@ func (a *app) stopRecording() {
 	}
 	if err != nil {
 		log.Printf("stop-recording: %v", err)
+	}
+}
+
+// stopVirtualCamera stops the virtual camera; the daemon clears its state
+// before replying.
+func (a *app) stopVirtualCamera() {
+	resp, err := a.b.Send(protocol.Request{Command: "execute", Action: "virtual-camera-stop"})
+	if err == nil && !resp.Success {
+		err = errors.New(resp.Message)
+	}
+	if err != nil {
+		log.Printf("virtual-camera-stop: %v", err)
 	}
 }
 
@@ -341,11 +362,14 @@ func (a *app) build() {
 	body.Append(section("Source"))
 	body.Append(a.buildSource())
 	a.audioSection = gtk.NewBox(gtk.OrientationVertical, 14)
-	a.audioSection.Append(section("Audio & camera"))
+	a.audioTitle = section("Audio & camera")
+	a.audioSection.Append(a.audioTitle)
 	a.audioSection.Append(a.buildAudio())
 	body.Append(a.audioSection)
-	body.Append(section("Countdown"))
-	body.Append(a.buildCountdown())
+	a.countdownBox = gtk.NewBox(gtk.OrientationVertical, 14)
+	a.countdownBox.Append(section("Countdown"))
+	a.countdownBox.Append(a.buildCountdown())
+	body.Append(a.countdownBox)
 
 	rec := gtk.NewButtonWithLabel("Record")
 	rec.AddCSSClass("suggested-action")
@@ -380,8 +404,11 @@ func (a *app) build() {
 }
 
 func (a *app) setupTitle() string {
-	if a.settings.Mode == ModeScreenshot {
+	switch a.settings.Mode {
+	case ModeScreenshot:
 		return "Capture screen"
+	case ModeCamera:
+		return "Virtual camera"
 	}
 	return "Record screen"
 }
@@ -391,7 +418,7 @@ func (a *app) buildMode() *gtk.Box {
 	box.AddCSSClass("linked")
 	box.SetHAlign(gtk.AlignCenter)
 	var first *gtk.ToggleButton
-	for _, mode := range []struct{ id, title string }{{ModeScreenshot, "Screenshot"}, {ModeVideo, "Video"}} {
+	for _, mode := range []struct{ id, title string }{{ModeScreenshot, "Screenshot"}, {ModeVideo, "Video"}, {ModeCamera, "Camera"}} {
 		b := gtk.NewToggleButtonWithLabel(mode.title)
 		if first == nil {
 			first = b
@@ -412,20 +439,34 @@ func (a *app) buildMode() *gtk.Box {
 }
 
 func (a *app) updateMode() {
-	video := a.settings.Mode != ModeScreenshot
-	a.audioSection.SetVisible(video)
+	video := a.settings.Mode == ModeVideo
+	live := a.settings.Mode == ModeCamera
+	a.audioSection.SetVisible(video || live)
+	a.desktop.SetVisible(video)
+	a.mic.SetVisible(video)
+	a.micRevealer.SetVisible(video)
 	a.cropRow.SetVisible(video)
-	a.cameraRevealer.SetVisible(video)
-	if video {
+	a.countdownBox.SetVisible(!live)
+	a.cameraRevealer.SetVisible(video || live)
+	a.shapeRow.SetVisible(!live)
+	switch {
+	case video:
+		a.audioTitle.SetText(strings.ToUpper("Audio & camera"))
 		a.startButton.SetLabel("Record")
 		a.regionHint.SetText("You will be asked to drag out an area once you press Record.")
 		a.windowHint.SetText("A window is recorded as its present on-screen area; moving it will not be followed.")
-	} else {
+	case live:
+		a.audioTitle.SetText(strings.ToUpper("Camera"))
+		a.startButton.SetLabel("Go live")
+		a.regionHint.SetText("You will be asked to drag out an area once you press Go live.")
+		a.windowHint.SetText("A window is shown as its present on-screen area; moving it will not be followed.")
+	default:
 		a.startButton.SetLabel("Capture")
 		a.regionHint.SetText("You will be asked to drag out an area once you press Capture.")
 		a.windowHint.SetText("The selected window's present on-screen area will be captured.")
 	}
 	a.win.SetTitle(a.setupTitle())
+	a.syncShape()
 	a.syncCameraRevealer()
 	a.syncPreview()
 }
@@ -913,7 +954,7 @@ func (a *app) startCapture() {
 	if a.busy || a.closing {
 		return
 	}
-	if a.settings.Mode != ModeScreenshot && a.mic.Active() && a.micSel != "" && !a.micsKnown {
+	if a.settings.Mode == ModeVideo && a.mic.Active() && a.micSel != "" && !a.micsKnown {
 		a.toast("Checking the microphones; please press Record again in a moment")
 		return
 	}
@@ -941,7 +982,7 @@ func (a *app) startCapture() {
 	}
 
 	a.saveSettings(s)
-	if s.Mode != ModeScreenshot {
+	if s.Mode == ModeVideo {
 		req.Options["quiet_finish"] = true
 	}
 
@@ -998,6 +1039,10 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	a.mu.Unlock()
 	if err != nil {
 		a.finish(nil, err)
+		return
+	}
+	if req.Action == "virtual-camera-start" {
+		a.waitVirtualCamera(latched)
 		return
 	}
 	if req.Action == "screenshot" {
@@ -1064,6 +1109,31 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	a.finish(&savedCapture{file: file, info: info, mode: ModeVideo}, nil)
 }
 
+// waitVirtualCamera returns to the dialogue once the virtual camera stops.
+func (a *app) waitVirtualCamera(latched bool) {
+	if latched {
+		a.stopVirtualCamera()
+	}
+	failures := 0
+	for {
+		st := a.state()
+		if st == nil {
+			failures++
+			if failures >= 3 {
+				a.finish(nil, errors.New("the daemon could not be reached to follow the virtual camera"))
+				return
+			}
+		} else {
+			failures = 0
+			if !st.VirtualCamera {
+				a.finish(nil, nil)
+				return
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 type savedCapture struct {
 	file string
 	info MediaInfo
@@ -1080,11 +1150,16 @@ func (a *app) finish(saved *savedCapture, err error) {
 		a.win.Present()
 		if err != nil {
 			a.showSetup()
-			kind := "recording"
-			if a.settings.Mode == ModeScreenshot {
-				kind = "screenshot"
+			kind := map[string]string{ModeScreenshot: "screenshot", ModeCamera: "virtual camera"}[a.settings.Mode]
+			if kind == "" {
+				kind = "recording"
 			}
 			a.toast("Regrettably, the " + kind + " failed: " + err.Error())
+			return
+		}
+		if saved == nil {
+			a.showSetup()
+			a.toast("The virtual camera has stopped.")
 			return
 		}
 		a.showResult(saved.file, saved.info, saved.mode)

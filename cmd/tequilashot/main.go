@@ -46,6 +46,7 @@ func main() {
 			stopRecordingCommand(),
 			pauseRecordingCommand(),
 			toggleRecordCommand(),
+			virtualCameraCommand(),
 			cameraBubbleCommand(),
 		},
 	}
@@ -108,6 +109,11 @@ func waybarStatusCommand() *cli.Command {
 				Name:  "icon-countdown",
 				Usage: "Icon for countdown state",
 				Value: "⏱",
+			},
+			&cli.StringFlag{
+				Name:  "icon-live",
+				Usage: "Icon for the virtual camera whilst it is live",
+				Value: "󰄀",
 			},
 			&cli.BoolFlag{
 				Name:  "no-idle-output",
@@ -414,6 +420,96 @@ func toggleRecordCommand() *cli.Command {
 	}
 }
 
+func virtualCameraCommand() *cli.Command {
+	startFlags := func() []cli.Flag {
+		flags := []cli.Flag{
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   "Show this monitor, such as DP-1 (default: the focused screen)",
+			},
+			&cli.BoolFlag{
+				Name:    "selection",
+				Aliases: []string{"s"},
+				Usage:   "Show a region chosen with slurp",
+			},
+			&cli.BoolFlag{
+				Name:    "current-window",
+				Aliases: []string{"W"},
+				Usage:   "Show the area of the focused window",
+			},
+			&cli.StringFlag{
+				Name:  "backend",
+				Usage: "Where to publish the camera: auto, v4l2loopback or pipewire (auto prefers a v4l2loopback device)",
+				Value: external.VirtualCameraAuto,
+			},
+		}
+		for _, f := range cameraFlags() {
+			switch f.Names()[0] {
+			case "camera-shape":
+			case "camera":
+				flags = append(flags, &cli.BoolFlag{
+					Name:    "camera",
+					Aliases: []string{"C"},
+					Usage:   "Show the round webcam on top of the screen (Meet then sees it through the virtual camera)",
+				})
+			default:
+				flags = append(flags, f)
+			}
+		}
+		return flags
+	}
+	request := func(ctx context.Context, c *cli.Command, action string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		if err := ensureDaemonRunning(cfg); err != nil {
+			return err
+		}
+		req := protocol.Request{Command: "execute", Action: action}
+		if action != "virtual-camera-stop" {
+			req.Options = withCameraOptions(c, map[string]interface{}{
+				"output":         c.String("output"),
+				"selection":      c.Bool("selection"),
+				"current_window": c.Bool("current-window"),
+				"backend":        c.String("backend"),
+			})
+		}
+		// No client deadline: a region selection waits on the user.
+		return sendAndHandleStartRequest(cfg.SocketPath, req)
+	}
+	return &cli.Command{
+		Name:  "virtual-camera",
+		Usage: "Offer a screen, with the round webcam on top, as a camera for Google Meet and other apps",
+		Commands: []*cli.Command{
+			{
+				Name:  "start",
+				Usage: "Start the virtual camera",
+				Flags: startFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return request(ctx, c, "virtual-camera-start")
+				},
+			},
+			{
+				Name:  "stop",
+				Usage: "Stop the virtual camera",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return request(ctx, c, "virtual-camera-stop")
+				},
+			},
+			{
+				Name:  "toggle",
+				Usage: "Start the virtual camera, or stop it when it is running",
+				Flags: startFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return request(ctx, c, "virtual-camera-toggle")
+				},
+			},
+		},
+	}
+}
+
 // Helper functions for command creation
 
 func cameraFlags() []cli.Flag {
@@ -647,6 +743,7 @@ func handleWaybarStatus(cfg *config.Config, follow, noIdleOutput bool, c *cli.Co
 		Recording: c.String("icon-recording"),
 		Paused:    c.String("icon-paused"),
 		Countdown: c.String("icon-countdown"),
+		Live:      c.String("icon-live"),
 	}
 	if follow {
 		return followWaybarStatus(cfg, icons, noIdleOutput)

@@ -22,7 +22,7 @@ closes. Every capture is also a command, for key bindings and Waybar.
   <img src=".github/screenshots/dialogue-window.png" alt="Window list with a preview of each open window" width="45%">
 </p>
 
-Pick Screenshot or Video, then a source:
+Pick Screenshot, Video or Camera, then a source:
 
 - Monitor: live thumbnails of each output.
 - Window: open windows with a preview, application and size.
@@ -71,6 +71,13 @@ and does not follow a moving window.
 
 It needs a GUI build, [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell)
 and a layer-shell compositor such as Sway or Hyprland.
+
+### Virtual camera
+
+Camera mode publishes the chosen monitor, window or region as a webcam that
+Google Meet, Chrome and other call applications can select, with your webcam
+in a round bubble on top. Press Go live to start it, and run `tequilashot`
+again to stop it. See [Virtual camera](#virtual-camera) for the one-off setup.
 
 ### After the capture
 
@@ -139,6 +146,11 @@ Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
 [aichat](https://github.com/sigoden/aichat) (AI-generated file names).
 
+The [virtual camera](#virtual-camera) also needs
+[wf-recorder](https://github.com/ammen99/wf-recorder), plus either the
+v4l2loopback kernel module or `gst-launch-1.0` with the GStreamer PipeWire
+plugin.
+
 ## Command line
 
 The commands use the same daemon as the dialogue and start it when needed.
@@ -176,6 +188,54 @@ Recording flags:
   `--camera-shape circle` for the [round camera](#round-camera).
 - `--crop-top <px>` (screen recordings only): trim pixels from the top.
 
+## Virtual camera
+
+`tequilashot virtual-camera` publishes a camera device that Chrome, Google Meet
+and other video-call applications can select. It shows a screen at 1280×720 and
+30 frames per second, with your webcam in a round bubble on top if you ask for
+it.
+
+```sh
+tequilashot virtual-camera start --camera
+tequilashot virtual-camera start --output DP-1 --camera --camera-position top-right
+tequilashot virtual-camera start --selection
+tequilashot virtual-camera toggle --current-window
+tequilashot virtual-camera stop
+```
+
+The focused screen is used unless you pass `--output`, `--selection` or
+`--current-window`. The webcam flags match the recording ones, except that the
+bubble is always round. While the virtual camera is live, the bubble holds the
+webcam, so choose the virtual camera in your call rather than the real one, and
+recordings that ask for the webcam are refused. If the shared screen shows the
+call itself, you will see an endless mirror.
+
+`--backend` chooses how the picture reaches other applications. `auto`, the
+default, uses a v4l2loopback device when one exists and PipeWire otherwise.
+
+v4l2loopback works with every application that reads `/dev/video*`. Install
+`v4l2loopback-dkms` and your kernel headers, then load the module:
+
+```sh
+sudo modprobe v4l2loopback devices=1 video_nr=10 card_label=tequilashot exclusive_caps=1
+```
+
+Chrome lists the device only with `exclusive_caps=1`. To load it at boot, put
+`v4l2loopback` in `/etc/modules-load.d/v4l2loopback.conf` and the options in
+`/etc/modprobe.d/v4l2loopback.conf`:
+
+```ini
+options v4l2loopback devices=1 video_nr=10 card_label=tequilashot exclusive_caps=1
+```
+
+The PipeWire backend needs no kernel module and appears as a camera named
+`tequilashot`. In Chrome, enable
+`chrome://flags/#enable-webrtc-pipewire-camera` first; support in other
+applications varies.
+
+To check the picture locally, run
+`mpv av://v4l2:/dev/video10 --profile=low-latency --untimed`.
+
 ## Configuration
 
 The dialogue stores its settings at
@@ -206,6 +266,9 @@ fix its `ExecStart` path.
   "return-type": "json"
 }
 ```
+
+While the virtual camera is live, the status uses the `live` class and the
+icon set by `--icon-live`.
 
 ## Sway key bindings
 

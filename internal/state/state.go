@@ -18,6 +18,7 @@ type State struct {
 	quietFinish        bool
 	recordingStartTime time.Time
 	countdownRemaining int
+	virtualCamera      bool
 	icons              Icons
 }
 
@@ -27,6 +28,7 @@ type Icons struct {
 	Recording string
 	Paused    string
 	Countdown string
+	Live      string
 }
 
 // DefaultIcons returns the default icon set.
@@ -36,6 +38,7 @@ func DefaultIcons() Icons {
 		Recording: "󰑊",
 		Paused:    "󰏤",
 		Countdown: "⏱",
+		Live:      "󰄀",
 	}
 }
 
@@ -62,6 +65,7 @@ func (s *State) GetState() *protocol.State {
 		Recording:     s.recording,
 		Paused:        s.paused,
 		RecordingFile: s.recordingFile,
+		VirtualCamera: s.virtualCamera,
 	}
 }
 
@@ -102,6 +106,20 @@ func (s *State) GetRecordingPID() int {
 	return s.recordingPID
 }
 
+// SetVirtualCamera records whether the virtual camera is running.
+func (s *State) SetVirtualCamera(running bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.virtualCamera = running
+}
+
+// VirtualCamera reports whether the virtual camera is running.
+func (s *State) VirtualCamera() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.virtualCamera
+}
+
 // SetPaused sets the pause state of the current recording.
 func (s *State) SetPaused(paused bool) {
 	s.mu.Lock()
@@ -128,7 +146,7 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Priority: countdown > screen recorder
+	// Priority: countdown > screen recorder > virtual camera
 	if s.countdownRemaining > 0 {
 		return &protocol.WaybarStatus{
 			Text:    fmt.Sprintf("%s %d", s.icons.Countdown, s.countdownRemaining),
@@ -155,6 +173,15 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 			Tooltip: fmt.Sprintf("Recording: %s (%02d:%02d)", s.recordingFile, minutes, seconds),
 			Class:   "recording",
 			Alt:     "recording",
+		}
+	}
+
+	if s.virtualCamera {
+		return &protocol.WaybarStatus{
+			Text:    s.icons.Live,
+			Tooltip: "Virtual camera live",
+			Class:   "live",
+			Alt:     "live",
 		}
 	}
 

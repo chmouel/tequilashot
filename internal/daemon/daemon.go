@@ -27,6 +27,7 @@ type Daemon struct {
 	listener          net.Listener
 	screenshotHandler *commands.ScreenshotHandler
 	recordingHandler  *commands.RecordingHandler
+	virtualCamera     *commands.VirtualCameraHandler
 	ctx               context.Context
 	cancel            context.CancelFunc
 	debug             bool
@@ -42,6 +43,7 @@ func New(cfg *config.Config, debug bool) *Daemon {
 		state:             st,
 		screenshotHandler: commands.NewScreenshotHandler(cfg, st),
 		recordingHandler:  commands.NewRecordingHandler(cfg, st),
+		virtualCamera:     commands.NewVirtualCameraHandler(cfg, st),
 		ctx:               ctx,
 		cancel:            cancel,
 		debug:             debug,
@@ -99,6 +101,7 @@ func (d *Daemon) Start() error {
 // Stop stops the daemon server.
 func (d *Daemon) Stop() {
 	log.Println("Stopping daemon")
+	d.virtualCamera.Shutdown()
 	d.cancel()
 
 	if d.listener != nil {
@@ -234,6 +237,22 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	case "pause-recording":
 		err = d.recordingHandler.PauseRecording(ctx)
 
+	case "virtual-camera-start", "virtual-camera-toggle":
+		vopts, vErr := parseVirtualCameraOptions(req.Options)
+		if vErr != nil {
+			return protocol.Response{Success: false, Message: vErr.Error()}
+		}
+		vopts.Output, vopts.Geometry = output, geometry
+		vopts.UseCamera, vopts.Camera = camera.enabled, camera.overlay
+		if req.Action == "virtual-camera-start" {
+			err = d.virtualCamera.Start(ctx, vopts)
+		} else {
+			err = d.virtualCamera.Toggle(ctx, vopts)
+		}
+
+	case "virtual-camera-stop":
+		err = d.virtualCamera.Stop(ctx)
+
 	case "toggle-record":
 		startAction := "movie-selection" // default
 		if req.Options != nil {
@@ -260,6 +279,9 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 				}
 				if countdown, ok := iconsMap["Countdown"].(string); ok {
 					icons.Countdown = countdown
+				}
+				if live, ok := iconsMap["Live"].(string); ok {
+					icons.Live = live
 				}
 				d.state.SetIcons(icons)
 			}
@@ -330,6 +352,40 @@ func parseMicDevice(options map[string]any) (string, error) {
 		return "", fmt.Errorf("option mic_device must be a string")
 	}
 	return dev, nil
+}
+
+// parseVirtualCameraOptions reads the source and backend options of a
+// virtual camera request.
+func parseVirtualCameraOptions(options map[string]any) (commands.VirtualCameraOptions, error) {
+	var opts commands.VirtualCameraOptions
+	for _, f := range []struct {
+		key string
+		dst any
+	}{
+		{"selection", &opts.Selection},
+		{"current_window", &opts.CurrentWindow},
+		{"backend", &opts.Backend},
+	} {
+		v, ok := options[f.key]
+		if !ok {
+			continue
+		}
+		switch dst := f.dst.(type) {
+		case *bool:
+			b, isBool := v.(bool)
+			if !isBool {
+				return opts, fmt.Errorf("option %s must be a boolean", f.key)
+			}
+			*dst = b
+		case *string:
+			str, isString := v.(string)
+			if !isString {
+				return opts, fmt.Errorf("option %s must be a string", f.key)
+			}
+			*dst = str
+		}
+	}
+	return opts, nil
 }
 
 // cameraRequest is the webcam overlay part of a start request.

@@ -20,6 +20,7 @@ type State struct {
 	Recording     bool   `json:"recording"`
 	Paused        bool   `json:"paused"`
 	RecordingFile string `json:"recording_file,omitempty"`
+	VirtualCamera bool   `json:"virtual_camera,omitempty"`
 }
 
 // WaybarStatus represents the status for waybar integration

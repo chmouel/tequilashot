@@ -3,6 +3,7 @@ package gui
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/chmouel/tequilashot/internal/external"
@@ -44,6 +45,7 @@ func TestLoadSettingsMode(t *testing.T) {
 		{`{"source":"region","desktop_audio":false,"countdown":5}`, ModeVideo},
 		{`{"mode":"unknown","source":"region","desktop_audio":false,"countdown":5}`, ModeVideo},
 		{`{"mode":"screenshot","source":"region","desktop_audio":false,"countdown":5}`, ModeScreenshot},
+		{`{"mode":"camera","source":"region","desktop_audio":false,"countdown":5}`, ModeCamera},
 	} {
 		if err := os.WriteFile(path, []byte(tc.data), 0o600); err != nil {
 			t.Fatal(err)
@@ -88,6 +90,30 @@ func TestBuildScreenshotRequest(t *testing.T) {
 		s.Source = source
 		if _, err := BuildRequest(s, Selection{}); err == nil {
 			t.Errorf("expected error for %s without a target", source)
+		}
+	}
+}
+
+func TestBuildVirtualCameraRequest(t *testing.T) {
+	s := DefaultSettings()
+	s.Mode, s.Mic, s.Desktop, s.CropTop, s.Countdown = ModeCamera, true, true, 40, 5
+	s.Camera, s.CameraShape, s.CameraPosition = true, external.CameraSquare, external.CameraTopLeft
+	for _, tc := range []struct {
+		source string
+		sel    Selection
+		want   map[string]interface{}
+	}{
+		{SourceMonitor, Selection{Monitor: "DP-1"}, map[string]interface{}{"output": "DP-1"}},
+		{SourceWindow, Selection{Geometry: "10,20 800x600"}, map[string]interface{}{"geometry": "10,20 800x600"}},
+		{SourceRegion, Selection{CameraDevice: "/dev/video0"}, map[string]interface{}{
+			"selection": true, "camera": true, "camera_device": "/dev/video0",
+			"camera_position": external.CameraTopLeft, "camera_size": external.CameraMedium, "camera_mirror": false,
+		}},
+	} {
+		s.Source = tc.source
+		req, err := BuildRequest(s, tc.sel)
+		if err != nil || req.Action != "virtual-camera-start" || !reflect.DeepEqual(req.Options, tc.want) {
+			t.Errorf("%s: %+v, %v", tc.source, req, err)
 		}
 	}
 }

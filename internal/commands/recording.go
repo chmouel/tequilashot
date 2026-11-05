@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -133,7 +134,10 @@ func resolveMic(ctx context.Context, opts RecordOptions) (RecordOptions, error) 
 }
 
 // resolveOptions validates the camera and microphone requests.
-func resolveOptions(ctx context.Context, opts RecordOptions) (RecordOptions, error) {
+func (h *RecordingHandler) resolveOptions(ctx context.Context, opts RecordOptions) (RecordOptions, error) {
+	if opts.UseCamera && h.state.VirtualCamera() {
+		return opts, errors.New("the virtual camera is using the webcam; its round camera is already on screen and will be recorded")
+	}
 	opts, err := resolveMic(ctx, opts)
 	if err != nil {
 		return opts, err
@@ -150,7 +154,7 @@ func WithQuietFinish(ctx context.Context) context.Context {
 
 // MovieSelection records a video of a selected region.
 func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, opts RecordOptions) error {
-	opts, err := resolveOptions(ctx, opts)
+	opts, err := h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -171,7 +175,7 @@ func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, opts R
 
 // MovieScreen records a video of the screen (or current screen if useCurrentScreen is true).
 func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurrentScreen bool, cropTop int, opts RecordOptions) error {
-	opts, err := resolveOptions(ctx, opts)
+	opts, err := h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -186,7 +190,7 @@ func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurren
 
 // MovieOutput records a video of the named output, optionally skipping cropTop pixels at its top.
 func (h *RecordingHandler) MovieOutput(ctx context.Context, delay int, output string, cropTop int, opts RecordOptions) error {
-	opts, err := resolveOptions(ctx, opts)
+	opts, err := h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -220,7 +224,7 @@ func (h *RecordingHandler) MovieGeometry(ctx context.Context, delay int, geometr
 		return fmt.Errorf("invalid geometry %q, expected \"X,Y WxH\"", geometry)
 	}
 
-	opts, err := resolveOptions(ctx, opts)
+	opts, err := h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -236,7 +240,7 @@ func (h *RecordingHandler) MovieGeometry(ctx context.Context, delay int, geometr
 
 // MovieCurrentWindow records a video of the currently focused window.
 func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, opts RecordOptions) error {
-	opts, err := resolveOptions(ctx, opts)
+	opts, err := h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}

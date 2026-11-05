@@ -15,6 +15,8 @@ import (
 const (
 	ModeVideo      = "video"
 	ModeScreenshot = "screenshot"
+	// ModeCamera offers the source as a virtual camera.
+	ModeCamera = "camera"
 
 	SourceMonitor = "monitor"
 	SourceWindow  = "window"
@@ -76,7 +78,9 @@ func LoadSettings(path string) Settings {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return DefaultSettings()
 	}
-	if s.Mode != ModeVideo && s.Mode != ModeScreenshot {
+	switch s.Mode {
+	case ModeVideo, ModeScreenshot, ModeCamera:
+	default:
 		s.Mode = ModeVideo
 	}
 	switch s.Source {
@@ -169,6 +173,9 @@ func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
 		}
 		return req, nil
 	}
+	if s.Mode == ModeCamera {
+		return buildCameraRequest(s, sel)
+	}
 	opts := map[string]interface{}{
 		"delay": s.Countdown,
 		"audio": s.Desktop,
@@ -203,6 +210,36 @@ func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
 		opts["geometry"] = sel.Geometry
 	case SourceRegion:
 		req.Action = "movie-selection"
+	default:
+		return req, errors.New("unknown source " + s.Source)
+	}
+	return req, nil
+}
+
+// buildCameraRequest asks for the virtual camera; its webcam is always round.
+func buildCameraRequest(s Settings, sel Selection) (protocol.Request, error) {
+	opts := map[string]interface{}{}
+	req := protocol.Request{Command: "execute", Action: "virtual-camera-start", Options: opts}
+	if s.Camera && sel.CameraDevice != "" {
+		opts["camera"] = true
+		opts["camera_device"] = sel.CameraDevice
+		opts["camera_position"] = s.CameraPosition
+		opts["camera_size"] = s.CameraSize
+		opts["camera_mirror"] = s.CameraMirror
+	}
+	switch s.Source {
+	case SourceMonitor:
+		if sel.Monitor == "" {
+			return req, errors.New("no monitor selected")
+		}
+		opts["output"] = sel.Monitor
+	case SourceWindow:
+		if sel.Geometry == "" {
+			return req, errors.New("no window selected")
+		}
+		opts["geometry"] = sel.Geometry
+	case SourceRegion:
+		opts["selection"] = true
 	default:
 		return req, errors.New("unknown source " + s.Source)
 	}
