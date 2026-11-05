@@ -158,7 +158,7 @@ func gsrArgs(geometry, output, filename string, outW, outH int, audio AudioSourc
 	}
 
 	source := base
-	if camera.Enabled() {
+	if camera.Enabled() && !camera.Round() {
 		source += "|" + camera.gsrSource()
 	}
 	args = append(args, "-w", source)

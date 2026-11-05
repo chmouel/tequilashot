@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -257,7 +258,46 @@ func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, op
 // earlyExitWindow is how long a new recorder must stay alive to count as started.
 const earlyExitWindow = 1500 * time.Millisecond
 
+type stopper interface{ Stop() }
+
+var (
+	startBubble = func(camera external.CameraOverlay, x, y, diameter int) (stopper, error) {
+		return external.StartCameraBubble(camera, x, y, diameter)
+	}
+	outputGeometry = sway.GetOutputGeometry
+)
+
+// showBubble puts the round camera on screen inside the recorded area. It
+// returns nil when the camera is not round.
+func showBubble(ctx context.Context, geometry, output string, camera external.CameraOverlay) (stopper, error) {
+	if !camera.Round() {
+		return nil, nil
+	}
+	if geometry == "" {
+		var err error
+		if geometry, err = outputGeometry(ctx, output); err != nil {
+			return nil, fmt.Errorf("failed to place the round camera: %w", err)
+		}
+	}
+	var x, y, w, h int
+	if _, err := fmt.Sscanf(geometry, "%d,%d %dx%d", &x, &y, &w, &h); err != nil || w <= 0 || h <= 0 {
+		return nil, fmt.Errorf("failed to place the round camera on %q", geometry)
+	}
+	bx, by, d := external.CircleLayout(float64(w), float64(h), camera.Size, camera.Position)
+	return startBubble(camera, x+int(math.Round(bx)), y+int(math.Round(by)), int(math.Round(d)))
+}
+
 func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, opts RecordOptions) error {
+	bubble, err := showBubble(ctx, geometry, output, opts.Camera)
+	if err != nil {
+		return err
+	}
+	stopBubble := func() {
+		if bubble != nil {
+			bubble.Stop()
+		}
+	}
+
 	h.mu.Lock()
 	base := h.cfg.GenerateRecordingBase()
 	if _, err := os.Stat(base + ".mp4"); err == nil {
@@ -267,6 +307,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 
 	if err := os.WriteFile(h.cfg.CacheFile, []byte(base), 0o600); err != nil {
 		h.mu.Unlock()
+		stopBubble()
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
@@ -280,6 +321,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 		_ = os.Remove(h.cfg.CacheFile)
 		h.current = prev
 		h.mu.Unlock()
+		stopBubble()
 		return fmt.Errorf("failed to start recording: %w", err)
 	}
 	sess.pid = cmd.Process.Pid
@@ -294,6 +336,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	exited := make(chan error, 1)
 	go func() {
 		err := cmd.Wait()
+		stopBubble()
 		h.mu.Lock()
 		if h.ownsCache(sess) {
 			h.state.SetRecording(false, "", 0)

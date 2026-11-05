@@ -20,6 +20,9 @@ const (
 	CameraSmall  = "small"
 	CameraMedium = "medium"
 	CameraLarge  = "large"
+
+	CameraSquare = "square"
+	CameraCircle = "circle"
 )
 
 var cameraDevicePattern = regexp.MustCompile(`^/dev/video\d+$`)
@@ -47,11 +50,17 @@ func ValidCameraSize(size string) bool {
 	return false
 }
 
+// ValidCameraShape reports whether shape names a supported overlay shape.
+func ValidCameraShape(shape string) bool {
+	return shape == CameraSquare || shape == CameraCircle
+}
+
 // CameraOverlay describes a webcam picture-in-picture layered over a recording.
 type CameraOverlay struct {
 	Device   string // empty disables the overlay
 	Position string // defaults to bottom-right
 	Size     string // defaults to medium
+	Shape    string // defaults to square
 	Mirror   bool
 	Width    int // chosen camera mode; zero lets gpu-screen-recorder pick
 	Height   int
@@ -61,6 +70,12 @@ type CameraOverlay struct {
 // Enabled reports whether the overlay is switched on.
 func (c CameraOverlay) Enabled() bool {
 	return c.Device != ""
+}
+
+// Round reports whether the overlay is drawn as an on-screen circle rather
+// than composited by gpu-screen-recorder.
+func (c CameraOverlay) Round() bool {
+	return c.Enabled() && c.Shape == CameraCircle
 }
 
 // Validate rejects values that could alter the gpu-screen-recorder source syntax,
@@ -74,6 +89,9 @@ func (c CameraOverlay) Validate() error {
 	}
 	if c.Size != "" && !ValidCameraSize(c.Size) {
 		return fmt.Errorf("invalid camera size %q (valid: small, medium, large)", c.Size)
+	}
+	if c.Shape != "" && !ValidCameraShape(c.Shape) {
+		return fmt.Errorf("invalid camera shape %q (valid: square, circle)", c.Shape)
 	}
 	if c.Width < 0 || c.Height < 0 || c.FPS < 0 {
 		return fmt.Errorf("invalid camera mode %dx%d@%d", c.Width, c.Height, c.FPS)

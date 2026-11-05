@@ -32,3 +32,16 @@ func guiAction(_ context.Context, _ *cli.Command) error {
 		},
 	})
 }
+
+func cameraBubbleAction(_ context.Context, c *cli.Command) error {
+	return gui.RunCameraBubble(gui.BubbleOptions{
+		Device:   c.String("device"),
+		X:        c.Int("x"),
+		Y:        c.Int("y"),
+		Diameter: c.Int("diameter"),
+		Width:    c.Int("width"),
+		Height:   c.Int("height"),
+		FPS:      c.Int("fps"),
+		Mirror:   c.Bool("mirror"),
+	})
+}

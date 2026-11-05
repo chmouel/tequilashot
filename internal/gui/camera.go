@@ -25,14 +25,48 @@ var (
 const (
 	previewWidth  = 460
 	previewHeight = 259
+	previewFPS    = 15
 	// previewRelease bounds the wait for a stopped preview to free the camera.
 	previewRelease = 2 * time.Second
 )
 
-var cameraSizes = []struct{ size, label string }{
+type choice struct{ value, label string }
+
+var cameraSizes = []choice{
 	{external.CameraSmall, "Small"},
 	{external.CameraMedium, "Medium"},
 	{external.CameraLarge, "Large"},
+}
+
+var cameraShapes = []choice{
+	{external.CameraSquare, "Square"},
+	{external.CameraCircle, "Circle"},
+}
+
+// linkedToggles builds a row of exclusive toggle buttons with current active,
+// calling onPick whenever another one is chosen.
+func linkedToggles(choices []choice, current string, onPick func(string)) *gtk.Box {
+	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	box.AddCSSClass("linked")
+	box.SetVAlign(gtk.AlignCenter)
+	var first *gtk.ToggleButton
+	for _, c := range choices {
+		b := gtk.NewToggleButtonWithLabel(c.label)
+		if first == nil {
+			first = b
+		} else {
+			b.SetGroup(first)
+		}
+		b.SetActive(c.value == current)
+		value := c.value
+		b.ConnectToggled(func() {
+			if b.Active() {
+				onPick(value)
+			}
+		})
+		box.Append(b)
+	}
+	return box
 }
 
 // buildCamera creates the camera pill, hidden until a camera is found, and the
@@ -50,31 +84,21 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 		a.camSize = external.CameraMedium
 	}
 
-	a.sizeBtns = map[string]*gtk.ToggleButton{}
-	sizes := gtk.NewBox(gtk.OrientationHorizontal, 0)
-	sizes.AddCSSClass("linked")
-	sizes.SetVAlign(gtk.AlignCenter)
-	var firstSize *gtk.ToggleButton
-	for _, sz := range cameraSizes {
-		b := gtk.NewToggleButtonWithLabel(sz.label)
-		if firstSize == nil {
-			firstSize = b
-		} else {
-			b.SetGroup(firstSize)
-		}
-		size := sz.size
-		b.ConnectToggled(func() {
-			if b.Active() {
-				a.camSize = size
-				if a.prevOverlay != nil {
-					a.prevOverlay.QueueResize()
-				}
-			}
-		})
-		a.sizeBtns[size] = b
-		sizes.Append(b)
+	a.camShape = a.settings.CameraShape
+	if !external.ValidCameraShape(a.camShape) {
+		a.camShape = external.CameraSquare
 	}
-	a.sizeBtns[a.camSize].SetActive(true)
+
+	sizes := linkedToggles(cameraSizes, a.camSize, func(size string) {
+		a.camSize = size
+		if a.prevOverlay != nil {
+			a.prevOverlay.QueueResize()
+		}
+	})
+	shapes := linkedToggles(cameraShapes, a.camShape, func(shape string) {
+		a.camShape = shape
+		a.syncShape()
+	})
 
 	a.camRow = adw.NewComboRow()
 	a.camRow.SetTitle("Camera")
@@ -84,6 +108,11 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	sizeRow := adw.NewActionRow()
 	sizeRow.SetTitle("Size")
 	sizeRow.AddSuffix(sizes)
+
+	shapeRow := adw.NewActionRow()
+	shapeRow.SetTitle("Shape")
+	shapeRow.SetSubtitle("A circle is shown on screen and recorded with it")
+	shapeRow.AddSuffix(shapes)
 
 	a.mirror = adw.NewSwitchRow()
 	a.mirror.SetTitle("Mirror")
@@ -95,6 +124,7 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	list.AddCSSClass("boxed-list")
 	list.Append(a.camRow)
 	list.Append(sizeRow)
+	list.Append(shapeRow)
 	list.Append(a.mirror)
 
 	a.cameraBox = gtk.NewBox(gtk.OrientationVertical, 14)
@@ -121,6 +151,7 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	a.cameraRevealer = rev
 	a.updatePreviewBase()
 	a.syncMirror()
+	a.syncShape()
 	return a.camera
 }
 
@@ -181,7 +212,13 @@ func (a *app) buildLayoutPreview() *gtk.Box {
 			return nil, false
 		}
 		cx, cy, cw, ch := external.ContainRect(fw, fh, a.previewAspect())
-		x, y, w, h := external.CameraLayout(cw, ch, a.cameraAspect(), a.camSize, a.camPos)
+		var x, y, w, h float64
+		if a.camShape == external.CameraCircle {
+			x, y, w = external.CircleLayout(cw, ch, a.camSize, a.camPos)
+			h = w
+		} else {
+			x, y, w, h = external.CameraLayout(cw, ch, a.cameraAspect(), a.camSize, a.camPos)
+		}
 		r := gdk.NewRectangle(int(cx+x+0.5), int(cy+y+0.5), int(w+0.5), int(h+0.5))
 		return &r, true
 	})
@@ -256,6 +293,19 @@ func (a *app) previewAspect() float64 {
 		return p.IntrinsicAspectRatio()
 	}
 	return 0
+}
+
+// syncShape rounds the camera tile in the layout preview to match the shape.
+func (a *app) syncShape() {
+	if a.camTile == nil {
+		return
+	}
+	if a.camShape == external.CameraCircle {
+		a.camTile.AddCSSClass("er-round")
+	} else {
+		a.camTile.RemoveCSSClass("er-round")
+	}
+	a.prevOverlay.QueueResize()
 }
 
 func (a *app) syncMirror() {
@@ -396,7 +446,7 @@ func (a *app) syncPreview() {
 
 	latest := &external.LatestFrame{}
 	w, h := external.PreviewMode(a.camModes, device)
-	a.preview = startPreview(&a.gate, device, w, h,
+	a.preview = startPreview(&a.gate, device, w, h, previewFPS,
 		func(frame []byte) {
 			if !latest.Put(frame) {
 				return
@@ -436,6 +486,7 @@ func (a *app) cameraSettings(s *Settings) {
 	s.CameraMirror = a.mirror.Active()
 	s.CameraPosition = a.camPos
 	s.CameraSize = a.camSize
+	s.CameraShape = a.camShape
 	s.CameraDevice = a.settings.CameraDevice
 	if a.camSel != "" {
 		s.CameraDevice = a.camSel

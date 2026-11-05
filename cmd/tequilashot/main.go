@@ -46,6 +46,7 @@ func main() {
 			stopRecordingCommand(),
 			pauseRecordingCommand(),
 			toggleRecordCommand(),
+			cameraBubbleCommand(),
 		},
 	}
 
@@ -321,6 +322,26 @@ func pauseRecordingCommand() *cli.Command {
 	return createSimpleCommand("pause-recording", "Pause/resume current recording")
 }
 
+// cameraBubbleCommand is started by the daemon to show the round camera.
+func cameraBubbleCommand() *cli.Command {
+	return &cli.Command{
+		Name:   "camera-bubble",
+		Usage:  "Show the round camera on screen (used internally whilst recording)",
+		Hidden: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "device", Required: true},
+			&cli.IntFlag{Name: "x"},
+			&cli.IntFlag{Name: "y"},
+			&cli.IntFlag{Name: "diameter", Required: true},
+			&cli.IntFlag{Name: "width"},
+			&cli.IntFlag{Name: "height"},
+			&cli.IntFlag{Name: "fps"},
+			&cli.BoolFlag{Name: "mirror"},
+		},
+		Action: cameraBubbleAction,
+	}
+}
+
 func toggleRecordCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "toggle-record",
@@ -416,6 +437,11 @@ func cameraFlags() []cli.Flag {
 			Usage: "Size of the camera: small, medium or large",
 			Value: external.CameraMedium,
 		},
+		&cli.StringFlag{
+			Name:  "camera-shape",
+			Usage: "Shape of the camera: square, or circle to show a round camera on screen that is recorded with it",
+			Value: external.CameraSquare,
+		},
 		&cli.BoolFlag{
 			Name:  "camera-mirror",
 			Usage: "Mirror the camera image horizontally",
@@ -442,6 +468,7 @@ func withCameraOptions(c *cli.Command, options map[string]interface{}) map[strin
 	options["camera_device"] = c.String("camera-device")
 	options["camera_position"] = c.String("camera-position")
 	options["camera_size"] = c.String("camera-size")
+	options["camera_shape"] = c.String("camera-shape")
 	options["camera_mirror"] = c.Bool("camera-mirror")
 	return options
 }

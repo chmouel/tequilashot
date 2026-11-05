@@ -36,6 +36,7 @@ type Settings struct {
 	CameraDevice   string `json:"camera_device"`
 	CameraPosition string `json:"camera_position"`
 	CameraSize     string `json:"camera_size"`
+	CameraShape    string `json:"camera_shape"`
 	CameraMirror   bool   `json:"camera_mirror"`
 }
 
@@ -47,6 +48,7 @@ func DefaultSettings() Settings {
 		Desktop:        true,
 		CameraPosition: external.CameraBottomRight,
 		CameraSize:     external.CameraMedium,
+		CameraShape:    external.CameraSquare,
 	}
 }
 
@@ -95,6 +97,9 @@ func LoadSettings(path string) Settings {
 	}
 	if !external.ValidCameraSize(s.CameraSize) {
 		s.CameraSize = external.CameraMedium
+	}
+	if !external.ValidCameraShape(s.CameraShape) {
+		s.CameraShape = external.CameraSquare
 	}
 	if !external.ValidCameraDevice(s.CameraDevice) {
 		s.CameraDevice = ""
@@ -177,6 +182,7 @@ func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
 		opts["camera_device"] = sel.CameraDevice
 		opts["camera_position"] = s.CameraPosition
 		opts["camera_size"] = s.CameraSize
+		opts["camera_shape"] = s.CameraShape
 		opts["camera_mirror"] = s.CameraMirror
 	}
 	req := protocol.Request{Command: "execute", Options: opts}

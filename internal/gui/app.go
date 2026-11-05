@@ -56,6 +56,7 @@ flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); 
 .er-layout:focus-visible { outline: 2px solid @accent_bg_color; outline-offset: 2px; }
 .er-prevholder { background: #1e293b; color: #94a3b8; }
 .er-camtile { border-radius: 6px; background: #334155; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px @accent_bg_color; }
+.er-camtile.er-round { border-radius: 9999px; }
 .er-cammsg { font-size: 0.7em; color: #cbd5e1; }
 .er-mirror { transform: scale(-1, 1); }
 .er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
@@ -99,7 +100,6 @@ type app struct {
 	camera         *gtk.ToggleButton
 	cameraRevealer *gtk.Revealer
 	cameraBox      *gtk.Box
-	sizeBtns       map[string]*gtk.ToggleButton
 	mirror         *adw.SwitchRow
 	camRow         *adw.ComboRow
 	cameras        []string
@@ -107,6 +107,7 @@ type app struct {
 	camSel         string
 	camPos         string
 	camSize        string
+	camShape       string
 
 	prevOverlay *gtk.Overlay
 	prevBase    *gtk.Stack

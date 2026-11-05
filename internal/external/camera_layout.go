@@ -52,6 +52,17 @@ func CameraLayout(frameW, frameH, aspect float64, size, position string) (x, y, 
 	return x, y, w, h
 }
 
+// CircleLayout places a round overlay within a frame: its diameter is the
+// height a 16:9 overlay of the same size would have, and it keeps that
+// overlay's corner and insets.
+func CircleLayout(frameW, frameH float64, size, position string) (x, y, d float64) {
+	x, y, w, h := CameraLayout(frameW, frameH, 16.0/9.0, size, position)
+	if position != CameraTopLeft && position != CameraBottomLeft {
+		x += w - h
+	}
+	return x, y, h
+}
+
 // PreviewMode picks a modest capture mode for the live preview: the largest
 // mode up to 640 wide, preferring the aspect of the recorded mode, else 640x480.
 func PreviewMode(modes []CameraMode, device string) (width, height int) {

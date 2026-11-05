@@ -13,6 +13,7 @@ import (
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/internal/state"
+	"github.com/chmouel/tequilashot/internal/sway"
 )
 
 func TestMovieGeometryRejectsInvalid(t *testing.T) {
@@ -223,5 +224,70 @@ func TestResolveMicFindsListedDevice(t *testing.T) {
 	opts, err := resolveMic(context.Background(), RecordOptions{Audio: external.AudioSources{Mic: true, MicDevice: "alsa_input.x"}})
 	if err != nil || opts.Audio.MicDevice != "alsa_input.x" {
 		t.Errorf("got %+v, %v", opts, err)
+	}
+}
+
+type fakeBubble struct{ stopped chan struct{} }
+
+func (b *fakeBubble) Stop() { close(b.stopped) }
+
+func TestRoundCameraBubbleFollowsRecorder(t *testing.T) {
+	stubRecorder(t, "exec sleep 30\n")
+	h, st := newTestHandler(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		waitForRecordingPID(t, st)
+		cancel()
+	}()
+
+	bubble := &fakeBubble{stopped: make(chan struct{})}
+	var placed [3]int
+	startBubble = func(_ external.CameraOverlay, x, y, d int) (stopper, error) {
+		placed = [3]int{x, y, d}
+		return bubble, nil
+	}
+	outputGeometry = func(context.Context, string) (string, error) { return "1600,0 1600x900", nil }
+	t.Cleanup(func() {
+		startBubble = func(c external.CameraOverlay, x, y, d int) (stopper, error) {
+			return external.StartCameraBubble(c, x, y, d)
+		}
+		outputGeometry = sway.GetOutputGeometry
+	})
+
+	opts := RecordOptions{Camera: external.CameraOverlay{Device: "/dev/video0", Shape: external.CameraCircle}}
+	if err := h.startRecording(ctx, "", "DP-1", opts); !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", err)
+	}
+	if placed != [3]int{1600 + 1343, 648, 225} {
+		t.Errorf("bubble placed at %v", placed)
+	}
+	select {
+	case <-bubble.stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("bubble outlived the recording")
+	}
+	if st.GetState().Recording {
+		t.Error("state still shows a recording")
+	}
+}
+
+func TestRoundCameraFailureStopsBeforeRecording(t *testing.T) {
+	stubRecorder(t, "touch \"$out\"\nexec sleep 30\n")
+	h, st := newTestHandler(t)
+	startBubble = func(external.CameraOverlay, int, int, int) (stopper, error) {
+		return nil, errors.New("camera /dev/video0 could not be opened")
+	}
+	t.Cleanup(func() {
+		startBubble = func(c external.CameraOverlay, x, y, d int) (stopper, error) {
+			return external.StartCameraBubble(c, x, y, d)
+		}
+	})
+
+	opts := RecordOptions{Camera: external.CameraOverlay{Device: "/dev/video0", Shape: external.CameraCircle}}
+	if err := h.startRecording(context.Background(), "10,20 800x600", "", opts); err == nil || !strings.Contains(err.Error(), "could not be opened") {
+		t.Fatalf("got %v", err)
+	}
+	if st.GetState().Recording {
+		t.Error("a recording started without its camera")
 	}
 }

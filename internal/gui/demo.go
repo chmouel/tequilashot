@@ -29,7 +29,7 @@ func init() {
 		}, "webcam-microphone", nil
 	}
 	cameraName = func(string) string { return "Demo camera" }
-	startPreview = func(_ *external.PreviewGate, _ string, _, _ int, onFrame func([]byte), onFail func()) *external.Preview {
+	startPreview = func(_ *external.PreviewGate, _ string, _, _, _ int, onFrame func([]byte), onFail func()) *external.Preview {
 		go func() {
 			if data, err := os.ReadFile(filepath.Join(dir, "camera.jpg")); err == nil {
 				onFrame(data)

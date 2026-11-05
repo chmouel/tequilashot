@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -13,8 +14,9 @@ import (
 const previewReleaseTimeout = 2 * time.Second
 
 // PreviewArgs returns the ffmpeg arguments that stream device as MJPEG on
-// stdout. Without native MJPEG the raw YUYV picture is encoded instead.
-func PreviewArgs(device string, width, height int, nativeMJPEG bool) []string {
+// stdout at fps frames a second. Without native MJPEG the raw YUYV picture is
+// encoded instead.
+func PreviewArgs(device string, width, height, fps int, nativeMJPEG bool) []string {
 	args := []string{"-hide_banner", "-loglevel", "error", "-f", "v4l2"}
 	if nativeMJPEG {
 		args = append(args, "-input_format", "mjpeg")
@@ -23,7 +25,7 @@ func PreviewArgs(device string, width, height int, nativeMJPEG bool) []string {
 	}
 	args = append(args,
 		"-video_size", fmt.Sprintf("%dx%d", width, height),
-		"-framerate", "15",
+		"-framerate", strconv.Itoa(fps),
 		"-i", device)
 	if nativeMJPEG {
 		return append(args, "-c:v", "copy", "-f", "mjpeg", "-")
@@ -117,13 +119,13 @@ func (g *PreviewGate) Start(timeout time.Duration, run func(ctx context.Context)
 // separate goroutine for every JPEG frame and onFail once if the camera cannot
 // be opened or stops delivering. It first waits for g to release the device.
 // Retire the result on g to end the session.
-func StartPreview(g *PreviewGate, device string, width, height int, onFrame func([]byte), onFail func()) *Preview {
+func StartPreview(g *PreviewGate, device string, width, height, fps int, onFrame func([]byte), onFail func()) *Preview {
 	return g.Start(previewReleaseTimeout, func(ctx context.Context) {
 		for _, native := range []bool{true, false} {
 			if ctx.Err() != nil {
 				return
 			}
-			parsed := runPreview(ctx, PreviewArgs(device, width, height, native), onFrame)
+			parsed := runPreview(ctx, PreviewArgs(device, width, height, fps, native), onFrame)
 			if ctx.Err() != nil {
 				return
 			}

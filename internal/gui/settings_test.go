@@ -28,7 +28,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	want := Settings{
 		Mode:   ModeScreenshot,
 		Source: SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,
-		Camera: true, CameraDevice: "/dev/video2", CameraPosition: "top-left", CameraSize: "large", CameraMirror: true,
+		Camera: true, CameraDevice: "/dev/video2", CameraPosition: "top-left", CameraSize: "large", CameraShape: "circle", CameraMirror: true,
 	}
 	if err := SaveSettings(path, want); err != nil {
 		t.Fatal(err)
@@ -108,9 +108,9 @@ func TestLoadSettingsFallbacks(t *testing.T) {
 	}
 
 	badCam := filepath.Join(dir, "badcam.json")
-	_ = os.WriteFile(badCam, []byte(`{"camera":true,"camera_device":"/dev/video0|DP-1","camera_position":"centre","camera_size":"huge"}`), 0o600)
+	_ = os.WriteFile(badCam, []byte(`{"camera":true,"camera_device":"/dev/video0|DP-1","camera_position":"centre","camera_size":"huge","camera_shape":"oval"}`), 0o600)
 	got = LoadSettings(badCam)
-	if !got.Camera || got.CameraDevice != "" || got.CameraPosition != "bottom-right" || got.CameraSize != "medium" {
+	if !got.Camera || got.CameraDevice != "" || got.CameraPosition != "bottom-right" || got.CameraSize != "medium" || got.CameraShape != "square" {
 		t.Fatalf("camera sanitising failed: %+v", got)
 	}
 }
@@ -138,7 +138,7 @@ func TestBuildRequest(t *testing.T) {
 func TestBuildRequestCamera(t *testing.T) {
 	s := DefaultSettings()
 	s.Source = SourceRegion
-	s.CameraPosition, s.CameraSize, s.CameraMirror = "top-right", "small", true
+	s.CameraPosition, s.CameraSize, s.CameraShape, s.CameraMirror = "top-right", "small", "circle", true
 
 	for name, tc := range map[string]struct {
 		camera bool
@@ -154,7 +154,7 @@ func TestBuildRequestCamera(t *testing.T) {
 	s.Camera = true
 	req, _ := BuildRequest(s, Selection{CameraDevice: "/dev/video4"})
 	o := req.Options
-	if o["camera"] != true || o["camera_device"] != "/dev/video4" || o["camera_position"] != "top-right" || o["camera_size"] != "small" || o["camera_mirror"] != true {
+	if o["camera"] != true || o["camera_device"] != "/dev/video4" || o["camera_position"] != "top-right" || o["camera_size"] != "small" || o["camera_shape"] != "circle" || o["camera_mirror"] != true {
 		t.Errorf("camera options wrong: %+v", o)
 	}
 }

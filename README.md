@@ -69,6 +69,8 @@ Install the runtime tools listed below for the features you use.
 
 ### Optional
 
+[gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) is needed only for
+the round webcam (`--camera-shape circle`).
 [Satty](https://github.com/gabm/satty) opens screenshots for editing.
 [aichat](https://github.com/sigoden/aichat) can provide AI-generated filenames. A file manager and `fd` are used
 for optional reveal and cleanup actions.
@@ -107,6 +109,13 @@ position it with `--camera-position` (`top-left`, `top-right`, `bottom-left`
 or `bottom-right`), and set its size with `--camera-size` (`small`, `medium` or
 `large`). `--camera-mirror` flips the image. `movie-screen` also accepts
 `--crop-top` to omit pixels from the top of the output.
+
+`--camera-shape circle` replaces the square overlay with a round bubble that
+has a thin white border. The bubble is shown on screen, above other windows,
+and is recorded along with the screen; it disappears when the recording ends.
+You may drag it anywhere on its monitor, and clicks around it reach the windows
+beneath. It needs a dialogue-enabled build and gtk4-layer-shell, and it does not
+follow a recorded window that is moved.
 
 ## Capture dialogue
 

@@ -50,6 +50,7 @@ func TestCameraValidate(t *testing.T) {
 		{Device: "x/dev/video0"},
 		{Device: testCameraDevice, Position: "middle"},
 		{Device: testCameraDevice, Size: "huge"},
+		{Device: testCameraDevice, Shape: "oval"},
 		{Device: testCameraDevice, Width: -1},
 		{Device: testCameraDevice, FPS: -1},
 	}
@@ -150,6 +151,33 @@ func TestGsrArgs(t *testing.T) {
 	if _, err := gsrArgs("", "DP-1", "o.mp4", 0, 0, AudioSources{}, CameraOverlay{Device: "/dev/video0|DP-1"}); err == nil {
 		t.Error("expected validation error")
 	}
+
+	round := CameraOverlay{Device: testCameraDevice, Shape: CameraCircle}
+	args, _ = gsrArgs("", "DP-1", "o.mp4", 1920, 1080, AudioSources{}, round)
+	if got = strings.Join(args, " "); got != "-f 60 -c mp4 -o o.mp4 -w DP-1" {
+		t.Errorf("a round camera must be left to the bubble: %q", got)
+	}
+}
+
+func TestCircleLayout(t *testing.T) {
+	// A medium 16:9 overlay in a 1600x900 frame is 400x225 at 1168,648.
+	if x, y, d := CircleLayout(1600, 900, CameraMedium, CameraBottomRight); x != 1168+400-225 || y != 648 || d != 225 {
+		t.Errorf("bottom-right: %v %v %v", x, y, d)
+	}
+	if x, y, d := CircleLayout(1600, 900, CameraMedium, CameraTopLeft); x != 32 || y != 27 || d != 225 {
+		t.Errorf("top-left: %v %v %v", x, y, d)
+	}
+}
+
+func TestBubbleFailure(t *testing.T) {
+	for stderr, want := range map[string]string{
+		"noise\n2026/11/05 16:40:38 camera /dev/video0 could not be opened\n": "camera /dev/video0 could not be opened",
+		"": "exited unexpectedly",
+	} {
+		if got := bubbleFailure(stderr); got != want {
+			t.Errorf("bubbleFailure(%q) = %q, want %q", stderr, got, want)
+		}
+	}
 }
 
 func TestCameraNameIn(t *testing.T) {
@@ -213,12 +241,12 @@ func TestPreviewMode(t *testing.T) {
 }
 
 func TestPreviewArgs(t *testing.T) {
-	native := strings.Join(PreviewArgs(testCameraDevice, 640, 360, true), " ")
+	native := strings.Join(PreviewArgs(testCameraDevice, 640, 360, 15, true), " ")
 	if !strings.Contains(native, "-input_format mjpeg") || !strings.Contains(native, "-c:v copy") || !strings.Contains(native, "-video_size 640x360") || !strings.HasSuffix(native, "-f mjpeg -") {
 		t.Errorf("native: %s", native)
 	}
-	raw := strings.Join(PreviewArgs(testCameraDevice, 640, 480, false), " ")
-	if !strings.Contains(raw, "-input_format yuyv422") || !strings.Contains(raw, "-c:v mjpeg -q:v 5") {
+	raw := strings.Join(PreviewArgs(testCameraDevice, 640, 480, 30, false), " ")
+	if !strings.Contains(raw, "-input_format yuyv422") || !strings.Contains(raw, "-c:v mjpeg -q:v 5") || !strings.Contains(raw, "-framerate 30") {
 		t.Errorf("raw: %s", raw)
 	}
 }
