@@ -3,10 +3,14 @@ package external
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -271,17 +275,43 @@ func Nautilus(ctx context.Context, fileURI string) error {
 	return cmd.Start()
 }
 
-// CleanupOldFiles removes files older than the specified duration
+// CleanupOldFiles removes regular files directly inside directory whose
+// modification time is older than olderThan. Hidden files, symlinks and
+// subdirectories are left alone.
 func CleanupOldFiles(ctx context.Context, directory string, olderThan time.Duration) error {
-	beforeTime := fmt.Sprintf("%dd", int(olderThan.Hours()/24))
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
 
-	cmd := exec.CommandContext( //nolint:gosec
-		ctx, "fd",
-		"-t", "f",
-		"--full-path", directory,
-		"--changed-before", beforeTime,
-		"--exec-batch", "rm", "-vf",
-	)
-
-	return cmd.Run()
+	cutoff := time.Now().Add(-olderThan)
+	var errs []error
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !entry.Type().IsRegular() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				errs = append(errs, err)
+			}
+			continue
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, err)
+			continue
+		}
+		log.Printf("Removed old file %s", path)
+	}
+	return errors.Join(errs...)
 }
