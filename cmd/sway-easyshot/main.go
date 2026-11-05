@@ -41,6 +41,7 @@ func main() {
 			stopRecordingCommand(),
 			pauseRecordingCommand(),
 			toggleRecordCommand(),
+			recordGUICommand(),
 		},
 	}
 
@@ -521,14 +522,19 @@ func startDaemon(cfg *config.Config) error {
 }
 
 func sendRequest(socketPath string, req protocol.Request) (*protocol.Response, error) {
+	return sendRequestTimeout(socketPath, req, 30*time.Second)
+}
+
+func sendRequestTimeout(socketPath string, req protocol.Request, timeout time.Duration) (*protocol.Response, error) {
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Set timeout
-	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+	if timeout > 0 {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+	}
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)

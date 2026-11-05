@@ -147,6 +147,7 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	useCurrentScreen := false
 	cropTop := 0
 	var audio external.AudioSources
+	var output, geometry string
 
 	if req.Options != nil {
 		if d, ok := req.Options["delay"].(float64); ok {
@@ -157,6 +158,12 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 		}
 		if ct, ok := req.Options["crop_top"].(float64); ok {
 			cropTop = int(ct)
+		}
+		if o, ok := req.Options["output"].(string); ok {
+			output = o
+		}
+		if g, ok := req.Options["geometry"].(string); ok {
+			geometry = g
 		}
 		if a, ok := req.Options["audio"].(bool); ok {
 			audio.Desktop = a
@@ -193,7 +200,14 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 		err = d.recordingHandler.MovieSelection(ctx, delay, audio)
 
 	case "movie-screen":
-		err = d.recordingHandler.MovieScreen(ctx, delay, useCurrentScreen, cropTop, audio)
+		if output != "" {
+			err = d.recordingHandler.MovieOutput(ctx, delay, output, cropTop, audio)
+		} else {
+			err = d.recordingHandler.MovieScreen(ctx, delay, useCurrentScreen, cropTop, audio)
+		}
+
+	case "movie-geometry":
+		err = d.recordingHandler.MovieGeometry(ctx, delay, geometry, audio)
 
 	case "movie-current-window":
 		err = d.recordingHandler.MovieCurrentWindow(ctx, delay, audio)

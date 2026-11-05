@@ -4,6 +4,8 @@ builds:
   - env:
       - CGO_ENABLED=0
     main: ./cmd/sway-easyshot
+    flags:
+      - -tags=nogui
     binary: sway-easyshot
     goos:
       - linux

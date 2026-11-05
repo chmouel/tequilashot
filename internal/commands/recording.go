@@ -54,6 +54,11 @@ func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurren
 		return fmt.Errorf("failed to select output: %w", err)
 	}
 
+	return h.MovieOutput(ctx, delay, output, cropTop, audio)
+}
+
+// MovieOutput records a video of the named output, optionally skipping cropTop pixels at its top.
+func (h *RecordingHandler) MovieOutput(ctx context.Context, delay int, output string, cropTop int, audio external.AudioSources) error {
 	if err := notify.CaptureDelay(delay, "movie screen", h.cfg.RecordingStartIcon); err != nil {
 		return err
 	}
@@ -74,6 +79,22 @@ func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurren
 	}
 
 	return h.startRecording(ctx, "", output, audio)
+}
+
+// MovieGeometry records a video of an explicit "X,Y WxH" area.
+func (h *RecordingHandler) MovieGeometry(ctx context.Context, delay int, geometry string, audio external.AudioSources) error {
+	var x, y, w, ht int
+	if _, err := fmt.Sscanf(geometry, "%d,%d %dx%d", &x, &y, &w, &ht); err != nil || w <= 0 || ht <= 0 {
+		return fmt.Errorf("invalid geometry %q, expected \"X,Y WxH\"", geometry)
+	}
+
+	if err := notify.CaptureDelay(delay, "movie geometry", h.cfg.RecordingStartIcon); err != nil {
+		return err
+	}
+
+	sleepWithCountdown(h.state, delay)
+
+	return h.startRecording(ctx, geometry, "", audio)
 }
 
 // MovieCurrentWindow records a video of the currently focused window.

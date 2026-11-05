@@ -21,6 +21,7 @@ A screenshot and screen recording utility for Sway/Wayland.
 - [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) - screen recording
 - [wl-clipboard](https://github.com/bugaevc/wl-clipboard) - clipboard (wl-copy/wl-paste)
 - [ffmpeg](https://ffmpeg.org/) - remuxing OBS recordings to MP4
+- [GTK 4](https://www.gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - runtime libraries for the `record-gui` dialogue (building from source requires their development headers and cgo)
 
 **Optional:**
 
@@ -50,6 +51,12 @@ Or build directly:
 make build
 ```
 
+Prebuilt release binaries are static and do not include the `record-gui`
+dialogue; the command there reports that it was built without GUI support.
+Building from source with the GTK 4 and libadwaita development files installed
+includes it. To build a static binary without the dialogue, use
+`CGO_ENABLED=0 go build -tags nogui ./cmd/sway-easyshot`.
+
 ## Usage
 
 ```bash
@@ -75,6 +82,9 @@ sway-easyshot pause-recording
 sway-easyshot toggle-record
 sway-easyshot toggle-record -a movie-screen --crop-top 75
 
+# Recording dialogue (GTK4/libadwaita)
+sway-easyshot record-gui
+
 # Waybar integration
 sway-easyshot waybar-status
 sway-easyshot waybar-status --follow
@@ -83,6 +93,31 @@ sway-easyshot waybar-status --follow
 sway-easyshot obs-toggle-recording
 sway-easyshot obs-toggle-pause
 ```
+
+## Recording Dialogue
+
+`sway-easyshot record-gui` opens a small libadwaita window in which to choose
+the source (a monitor with a live thumbnail, an open window, or a region), the
+audio sources (desktop sound, microphone) and a countdown of 0, 3, 5 or 10
+seconds. Escape closes the window and Enter starts recording. The choices are
+remembered in `$XDG_CONFIG_HOME/sway-easyshot/record-gui.json`
+(`~/.config` when unset).
+
+The window hides whilst recording and returns, with a notice of the saved file,
+once the recording ends. Running `record-gui` whilst a recording is in progress
+stops it and shows the window again, so a single key binding suffices. If the
+key is pressed whilst the recording is still being set up (countdown or region
+selection), the stop is held and applied as soon as recording begins. Monitor
+thumbnails refresh every two seconds whilst the window is visible.
+Window and monitor listing supports both Hyprland and sway.
+
+The dialogue drives the daemon through two additions to the request options,
+which other clients may use as well:
+
+- `movie-screen` accepts an `output` option naming the output to record,
+  bypassing the interactive selection when present.
+- `movie-geometry` is a new action recording the `geometry` option, given in
+  slurp form (`"X,Y WxH"`). It honours `delay`, `audio` and `mic`.
 
 ## Waybar Configuration
 
