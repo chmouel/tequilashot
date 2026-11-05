@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Config holds all configuration for sway-easyshot.
+// Config holds all configuration for tequilashot.
 type Config struct {
 	SaveLocation       string
 	CacheFile          string
@@ -31,15 +31,15 @@ func Load() (*Config, error) {
 	uid := os.Getuid()
 
 	cfg := &Config{
-		SaveLocation:       getEnv("SWAY_SCREENSHOT_SAVE_LOCATION", filepath.Join(homeDir, "Downloads", "Screenshots")),
-		CacheFile:          filepath.Join(homeDir, ".cache", ".sway-easyshot-recording"),
+		SaveLocation:       getEnv("TEQUILASHOT_SAVE_LOCATION", filepath.Join(homeDir, "Downloads", "Screenshots")),
+		CacheFile:          filepath.Join(homeDir, ".cache", ".tequilashot-recording"),
 		CleanupTime:        3 * 24 * time.Hour, // 3 days
-		AIModelImage:       getEnv("SWAY_SCREENSHOT_AI_MODEL", "gemini:gemini-2.5-flash-image"),
+		AIModelImage:       getEnv("TEQUILASHOT_AI_MODEL", "gemini:gemini-2.5-flash-image"),
 		ScreenshotIcon:     filepath.Join(homeDir, ".local", "share", "icons", "screenshot.svg"),
 		RecordingStartIcon: filepath.Join(homeDir, ".local", "share", "icons", "record-start.svg"),
 		RecordingStopIcon:  filepath.Join(homeDir, ".local", "share", "icons", "record-stop.svg"),
 		RecordingPauseIcon: filepath.Join(homeDir, ".local", "share", "icons", "record-pause.svg"),
-		SocketPath:         fmt.Sprintf("/run/user/%d/sway-easyshot.sock", uid),
+		SocketPath:         fmt.Sprintf("/run/user/%d/tequilashot.sock", uid),
 		WaybarPollInterval: getPollInterval(),
 	}
 
@@ -69,7 +69,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 func getPollInterval() time.Duration {
-	intervalStr := os.Getenv("SWAY_SCREENSHOT_WAYBAR_POLL_INTERVAL")
+	intervalStr := os.Getenv("TEQUILASHOT_WAYBAR_POLL_INTERVAL")
 	if intervalStr == "" {
 		return 1000 * time.Millisecond // Default: 1 second
 	}

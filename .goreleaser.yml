@@ -3,10 +3,10 @@ version: 2
 builds:
   - env:
       - CGO_ENABLED=0
-    main: ./cmd/sway-easyshot
+    main: ./cmd/tequilashot
     flags:
       - -tags=nogui
-    binary: sway-easyshot
+    binary: tequilashot
     goos:
       - linux
     goarch:
@@ -32,14 +32,14 @@ release:
 
 nfpms:
   - file_name_template: >-
-      sway-easyshot-
+      tequilashot-
       {{- .Version}}_{{.Os}}-
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else if eq .Arch "arm64" }}aarch64
       {{- else }}{{ .Arch }}{{ end }}
-    homepage: https://github.com/chmouel/sway-easyshot
-    description: "sway-easyshot - A webhook and https://smee.io forwarder"
+    homepage: https://github.com/chmouel/tequilashot
+    description: "Tequilashot - screenshots and screen recording for Wayland"
     maintainer: Chmouel Boudjnah <chmouel@chmouel.com>
     license: Apache 2.0
     formats:
@@ -48,12 +48,28 @@ nfpms:
       - rpm
     bindir: /usr/bin
 changelog:
-  sort: asc
-  use: github
+  sort: desc
+  use: git
+  groups:
+    - title: Features
+      regexp: '^feat(\([^)]+\))?:'
+      order: 0
+    - title: Fixes
+      regexp: '^fix(\([^)]+\))?:'
+      order: 1
+    - title: Performance
+      regexp: '^perf(\([^)]+\))?:'
+      order: 2
+    - title: Other changes
+      regexp: '.*'
+      order: 999
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
+      - '^docs(\([^)]+\))?:'
+      - '^test(\([^)]+\))?:'
+      - '^chore(\([^)]+\))?:'
+      - '^ci(\([^)]+\))?:'
+      - '^build(\([^)]+\))?:'
       - "^Brew formula update"
       - Merge pull request
       - Merge branch
@@ -61,14 +77,14 @@ changelog:
       - Update README.md
 
 aurs:
-  - name: sway-easyshot-bin
-    homepage: "https://github.com/chmouel/sway-easyshot"
-    description: "sway-easyshot - Sway Screenshot control"
+  - name: tequilashot-bin
+    homepage: "https://github.com/chmouel/tequilashot"
+    description: "Tequilashot - screenshots and screen recording for Wayland"
     maintainers:
       - "Chmouel Boudjnah <chmouel@chmouel.com>"
     license: Apache 2.0
     private_key: "{{ .Env.AUR_PRIVATE_KEY }}"
-    git_url: ssh://aur@aur.archlinux.org/sway-easyshot-bin.git
+    git_url: ssh://aur@aur.archlinux.org/tequilashot-bin.git
     package: |-
-      install -Dm755 "./sway-easyshot" "${pkgdir}/usr/bin/sway-easyshot"
-      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/sway-easyshot/LICENSE"
+      install -Dm755 "./tequilashot" "${pkgdir}/usr/bin/tequilashot"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/tequilashot/LICENSE"

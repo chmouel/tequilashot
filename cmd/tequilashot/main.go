@@ -12,19 +12,19 @@ import (
 	"syscall"
 	"time"
 
-	"sway-easyshot/internal/config"
-	"sway-easyshot/internal/daemon"
-	"sway-easyshot/internal/external"
-	"sway-easyshot/internal/state"
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/daemon"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/state"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 
 	"github.com/urfave/cli/v3"
 )
 
 func main() {
 	cmd := &cli.Command{
-		Name:  "sway-easyshot",
-		Usage: "Recording and screenshot utility for sway; without a command, opens the capture dialogue",
+		Name:  "tequilashot",
+		Usage: "Wayland screenshot and screen recording utility for Sway and Hyprland; without a command, opens the capture dialogue",
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.Args().Present() {
 				return fmt.Errorf("unknown command %q", c.Args().First())
@@ -82,7 +82,7 @@ func waybarStatusCommand() *cli.Command {
 		Name:  "waybar-status",
 		Usage: "Output waybar status (JSON)",
 		Description: "Outputs current recording/screenshot status in Waybar JSON format.\n" +
-			"Poll interval: SWAY_SCREENSHOT_WAYBAR_POLL_INTERVAL (default: 1s)",
+			"Poll interval: TEQUILASHOT_WAYBAR_POLL_INTERVAL (default: 1s)",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "follow",

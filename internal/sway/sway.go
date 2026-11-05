@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"sway-easyshot/internal/external"
+	"github.com/chmouel/tequilashot/internal/external"
 )
 
 type swayRect struct {

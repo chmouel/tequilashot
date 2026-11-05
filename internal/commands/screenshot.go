@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"sway-easyshot/internal/config"
-	"sway-easyshot/internal/external"
-	"sway-easyshot/internal/notify"
-	"sway-easyshot/internal/state"
-	"sway-easyshot/internal/sway"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/notify"
+	"github.com/chmouel/tequilashot/internal/state"
+	"github.com/chmouel/tequilashot/internal/sway"
 )
 
 // ScreenshotHandler provides methods for screenshot operations.

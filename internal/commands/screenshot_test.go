@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"sway-easyshot/internal/config"
-	"sway-easyshot/internal/state"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/state"
 )
 
 func screenshotTools(t *testing.T, grim, slurp string) (*ScreenshotHandler, string) {

@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"sway-easyshot/internal/external"
-	"sway-easyshot/internal/sway"
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/sway"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
@@ -27,7 +27,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
-const appID = "com.chmouel.SwayEasyshot.Recorder"
+const appID = "com.chmouel.Tequilashot.Recorder"
 
 // hideSettle gives the compositor time to unmap the dialogue before capture.
 const hideSettle = 300 * time.Millisecond

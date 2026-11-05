@@ -5,11 +5,26 @@ import (
 	"path/filepath"
 	"testing"
 
-	"sway-easyshot/internal/external"
+	"github.com/chmouel/tequilashot/internal/external"
 )
 
+func TestSettingsPathUsesTequilashotIdentity(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	path, err := settingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(configHome, "tequilashot", "tequilashot.json")
+	if path != want {
+		t.Errorf("settingsPath() = %q, want %q", path, want)
+	}
+}
+
 func TestSettingsRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sub", "sway-easyshot.json")
+	path := filepath.Join(t.TempDir(), "sub", "tequilashot.json")
 	want := Settings{
 		Mode:   ModeScreenshot,
 		Source: SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,

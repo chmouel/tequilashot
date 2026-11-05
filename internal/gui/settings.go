@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"sway-easyshot/internal/external"
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 )
 
 // Capture modes and source kinds selectable in the dialogue
@@ -50,7 +50,7 @@ func DefaultSettings() Settings {
 	}
 }
 
-// settingsPath locates sway-easyshot.json under the user's configuration directory.
+// settingsPath locates tequilashot.json under the user's configuration directory.
 func settingsPath() (string, error) {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
@@ -60,7 +60,7 @@ func settingsPath() (string, error) {
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "sway-easyshot", "sway-easyshot.json"), nil
+	return filepath.Join(dir, "tequilashot", "tequilashot.json"), nil
 }
 
 // LoadSettings reads settings from path, falling back to defaults for a

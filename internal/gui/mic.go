@@ -11,7 +11,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
-	"sway-easyshot/internal/external"
+	"github.com/chmouel/tequilashot/internal/external"
 )
 
 // listMics returns the capture devices and the id of the default input, which

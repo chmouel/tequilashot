@@ -1,4 +1,4 @@
-NAME = sway-easyshot
+NAME = tequilashot
 
 all: build
 

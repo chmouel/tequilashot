@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"sway-easyshot/internal/config"
-	"sway-easyshot/internal/gui"
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/gui"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 
 	"github.com/urfave/cli/v3"
 )

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the README and social-preview images for the capture dialogue.
 
-Runs the `demo` build of sway-easyshot (staged monitors, windows, a
+Runs the `demo` build of tequilashot (staged monitors, windows, a
 screenshot and a recording, so no real desktop content is captured), grabs each page on a
 Hyprland session with grim and composes the results with Pillow.
 
@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / ".github" / "screenshots"
-APP_CLASS = "com.chmouel.SwayEasyshot.Recorder"
+APP_CLASS = "com.chmouel.Tequilashot.Recorder"
 CLIP = "recording-20261105-13h04.mp4"
 WINDOW_RADIUS = 14
 PAGES = ("monitor", "window", "result", "screenshot", "screenshot-result")
@@ -75,7 +75,10 @@ def blobs(img, colours, seed):
     return Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
 
 
-BACKDROP = [(0.0, (236, 72, 153)), (0.5, (124, 58, 237)), (1.0, (59, 130, 246))]
+GRAPHITE = (37, 42, 48)
+PETROL = (23, 107, 104)
+PALE_TEAL = (141, 213, 203)
+BACKDROP = [(0.0, GRAPHITE), (0.55, (31, 62, 64)), (1.0, PETROL)]
 
 
 def mock_window(w, h, kind, rnd):
@@ -224,7 +227,7 @@ def looks_like_dialogue(img):
 
 def capture(binary, tmp, page):
     # Pin the dark style so the images do not depend on the desktop colour scheme.
-    env = dict(os.environ, SWAY_EASYSHOT_DEMO=page, SWAY_EASYSHOT_DEMO_DIR=str(tmp),
+    env = dict(os.environ, TEQUILASHOT_DEMO=page, TEQUILASHOT_DEMO_DIR=str(tmp),
                ADW_DEBUG_COLOR_SCHEME="prefer-dark")
     proc = subprocess.Popen([binary], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
@@ -283,7 +286,7 @@ def paste_with_shadow(canvas, win, pos, blur=28, offset=(0, 18), alpha=120):
 
 
 def backdrop(w, h, seed):
-    return blobs(gradient(w, h, BACKDROP), [(255, 255, 255), (255, 170, 220), (150, 190, 255)], seed).convert("RGBA")
+    return blobs(gradient(w, h, BACKDROP), [PALE_TEAL, (72, 151, 145), (51, 91, 94)], seed).convert("RGBA")
 
 
 def hero(shots):
@@ -305,15 +308,27 @@ def hero(shots):
 
 
 def logo(size):
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    scale = 4
+    extent = size * scale
+    factor = extent / 512
+    img = Image.new("RGBA", (extent, extent), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=size // 4.5, fill=(30, 27, 46))
-    m = size // 5
-    d.rounded_rectangle((m, m + size // 10, size - m, size - m - size // 10), radius=size // 12, outline=(196, 181, 253), width=max(3, size // 28))
-    r = size // 9
-    c = size // 2
-    d.ellipse((c - r, c - r, c + r, c + r), fill=(244, 63, 94))
-    return img
+    d.rounded_rectangle((0, 0, extent - 1, extent - 1), radius=round(extent * 0.23), fill=GRAPHITE + (255,))
+
+    mask = Image.new("L", (extent, extent), 0)
+    cut = ImageDraw.Draw(mask)
+    cut.rounded_rectangle(tuple(round(v * factor) for v in (64, 64, 448, 448)),
+                          radius=round(82 * factor), fill=255)
+    cut.rounded_rectangle(tuple(round(v * factor) for v in (124, 124, 388, 388)),
+                          radius=round(42 * factor), fill=0)
+    cut.rectangle(tuple(round(v * factor) for v in (56, 216, 132, 296)), fill=0)
+    cut.rectangle(tuple(round(v * factor) for v in (380, 216, 456, 296)), fill=0)
+    cut.polygon([tuple(round(v * factor) for v in p) for p in
+                 ((168, 424), (220, 372), (240, 392), (256, 336), (272, 392), (292, 372), (344, 424))],
+                fill=0)
+    mark = Image.new("RGBA", (extent, extent), PALE_TEAL + (255,))
+    img.paste(mark, (0, 0), mask)
+    return img.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def social(shots):
@@ -330,16 +345,17 @@ def social(shots):
         return box
 
     canvas.alpha_composite(logo(88), (left, 84))
-    text((left, 196), "sway-easyshot", font(68, "Bold"), fill="white")
-    text((left + 2, 290), "Screenshots and GPU-accelerated\nscreen recordings for sway\nand Hyprland",
+    text((left, 196), "tequilashot", font(68, "Bold"), fill="white")
+    text((left + 2, 290), "Screenshots and GPU-accelerated\nrecordings for Sway\nand Hyprland",
          font(28, "Medium"), fill=(255, 255, 255, 235), spacing=8)
 
     chip_font = font(21, "SemiBold")
     x, y = left + 2, 432
-    for row in (("Hyprland", "sway", "GTK4"), ("gpu-screen-recorder", "webcam overlay")):
+    for row in (("Sway", "Hyprland", "GTK 4"), ("GPU Screen Recorder", "Webcam overlay")):
         for chip in row:
             tw = d.textlength(chip, font=chip_font)
-            d.rounded_rectangle((x, y, x + tw + 30, y + 42), radius=21, fill=(20, 12, 46, 150))
+            d.rounded_rectangle((x, y, x + tw + 30, y + 42), radius=21,
+                                fill=(26, 45, 46, 235), outline=PALE_TEAL + (90,), width=1)
             d.text((x + 15, y + 9), chip, font=chip_font, fill="white")
             right_edge = max(right_edge, x + tw + 30)
             x += tw + 30 + 10
@@ -360,8 +376,8 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
-        binary = str(tmp / "sway-easyshot-demo")
-        subprocess.run(["go", "build", "-tags", "demo", "-o", binary, "./cmd/sway-easyshot"], cwd=ROOT, check=True)
+        binary = str(tmp / "tequilashot-demo")
+        subprocess.run(["go", "build", "-tags", "demo", "-o", binary, "./cmd/tequilashot"], cwd=ROOT, check=True)
         stage_assets(tmp)
         shots = {p: capture(binary, tmp, p) for p in PAGES}
         for page, img in shots.items():

@@ -10,21 +10,14 @@ import (
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
-	"sway-easyshot/internal/external"
-	"sway-easyshot/internal/sway"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/sway"
 )
 
-// The demo build stages the dialogue for documentation screenshots:
-//
-//	SWAY_EASYSHOT_DEMO=monitor|window|region|result|screenshot|screenshot-window|screenshot-result
-//	SWAY_EASYSHOT_DEMO_DIR=dir holding DP-1.jpg, HDMI-A-1.jpg, camera.jpg, window-1.jpg to window-4.jpg, screenshot.png and the demoClip recording
-//
-// Nothing is read from or written to the real desktop or settings.
 const demoClip = "recording-20261105-13h04.mp4"
 
 func init() {
-	// A demo binary never touches the webcam or captures the desktop, staged or not
-	dir := os.Getenv("SWAY_EASYSHOT_DEMO_DIR")
+	dir := os.Getenv("TEQUILASHOT_DEMO_DIR")
 	captureDisabled = true
 	listCameraModes = func(context.Context) ([]external.CameraMode, error) {
 		return []external.CameraMode{{Device: "/dev/video0", Width: 1280, Height: 720, FPS: 30, Format: "mjpeg"}}, nil
@@ -47,7 +40,7 @@ func init() {
 		return nil
 	}
 
-	page := os.Getenv("SWAY_EASYSHOT_DEMO")
+	page := os.Getenv("TEQUILASHOT_DEMO")
 	if page == "" {
 		return
 	}
@@ -60,7 +53,7 @@ func init() {
 	}
 	listWindows = func(context.Context) ([]sway.Window, error) {
 		return []sway.Window{
-			{ID: "1", Title: "sway-easyshot — README.md", Class: "com.mitchellh.ghostty", Width: 1906, Height: 2115},
+			{ID: "1", Title: "tequilashot — README.md", Class: "com.mitchellh.ghostty", Width: 1906, Height: 2115},
 			{ID: "2", Title: "Release notes — Mozilla Firefox", Class: "firefox", Width: 1906, Height: 2115},
 			{ID: "3", Title: "Videos", Class: "org.gnome.Nautilus", Width: 1280, Height: 800},
 			{ID: "4", Title: "Weekly notes — Obsidian", Class: "obsidian", Width: 1906, Height: 1035},

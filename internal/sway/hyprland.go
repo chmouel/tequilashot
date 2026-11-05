@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"sway-easyshot/internal/external"
+	"github.com/chmouel/tequilashot/internal/external"
 )
 
 // The compositor queries are implemented for both sway and Hyprland; the

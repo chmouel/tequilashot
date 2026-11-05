@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"sway-easyshot/internal/config"
-	"sway-easyshot/internal/external"
-	"sway-easyshot/internal/state"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/state"
 )
 
 func TestMovieGeometryRejectsInvalid(t *testing.T) {

@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"sway-easyshot/internal/commands"
-	"sway-easyshot/internal/config"
-	"sway-easyshot/internal/external"
-	"sway-easyshot/internal/state"
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/internal/commands"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/state"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 )
 
 // Daemon manages the socket server for executing screenshot and recording commands.

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"sway-easyshot/internal/config"
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 )
 
 func TestScreenshotResponse(t *testing.T) {

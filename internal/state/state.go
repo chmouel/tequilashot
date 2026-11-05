@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"sway-easyshot/pkg/protocol"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 )
 
 // State tracks the current state of recordings.

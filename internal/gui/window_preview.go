@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 
-	"sway-easyshot/internal/sway"
+	"github.com/chmouel/tequilashot/internal/sway"
 )
 
 const (

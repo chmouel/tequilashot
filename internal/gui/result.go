@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"sway-easyshot/internal/external"
+	"github.com/chmouel/tequilashot/internal/external"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"

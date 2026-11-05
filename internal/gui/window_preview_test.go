@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"sway-easyshot/internal/sway"
+	"github.com/chmouel/tequilashot/internal/sway"
 )
 
 func TestCaptureWindowPreview(t *testing.T) {

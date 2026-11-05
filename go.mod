@@ -1,4 +1,4 @@
-module sway-easyshot
+module github.com/chmouel/tequilashot
 
 go 1.25.6
 
