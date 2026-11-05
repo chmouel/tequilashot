@@ -57,7 +57,6 @@ func (a *app) buildResult() *gtk.Box {
 	r.name = label("", "heading")
 	r.name.SetXAlign(0.5)
 	r.name.SetEllipsize(pango.EllipsizeMiddle)
-	r.name.SetSelectable(true)
 
 	r.caption = label("", "dim-label", "caption")
 	r.caption.SetXAlign(0.5)

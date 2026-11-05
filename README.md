@@ -2,6 +2,8 @@
 
 A screenshot and screen recording utility for Sway/Wayland.
 
+![The record-gui dialogue: choosing a monitor, choosing a window, and the result card after a recording](.github/screenshots/record-gui.png)
+
 ## Features
 
 - Screenshot capture (window, screen, or selection)
@@ -37,14 +39,17 @@ A screenshot and screen recording utility for Sway/Wayland.
 ## Installation
 
 ## AUR Arch
+
 ```
 yay install sway-easyshot-bin
 ```
 
 ### jsource
+
 ```bash
 go install github.com/chmouel/sway-easyshot/cmd/sway-easyshot@latest
 ```
+
 Or build directly:
 
 ```bash
@@ -107,12 +112,18 @@ The window hides whilst recording and returns, showing a result card, once the
 recording ends: a frame from the video, its name, duration, resolution and size,
 with buttons to play it, reveal it in the file manager, copy its path, rename it
 or move it to the bin. "New recording" (or Escape) returns to the setup page.
-Previews and details rely on `ffmpeg` and `ffprobe`. Running `record-gui` whilst a recording is in progress
-stops it and shows the window again, so a single key binding suffices. If the
-key is pressed whilst the recording is still being set up (countdown or region
+Previews and details rely on `ffmpeg` and `ffprobe`.
+
+Running `record-gui` whilst a recording is in progress stops it and shows the
+window again, so a single key binding suffices. If the key is pressed whilst the recording is still being set up (countdown or region
 selection), the stop is held and applied as soon as recording begins. Monitor
 thumbnails refresh every two seconds whilst the window is visible.
 Window and monitor listing supports both Hyprland and sway.
+
+The screenshots in this README are rendered by `make screenshots` from a
+`demo` build that stages its monitors, windows and recording, so no real
+desktop content is captured. It requires a Hyprland session, `grim`, `ffmpeg`
+and Pillow.
 
 The dialogue drives the daemon through two additions to the request options,
 which other clients may use as well:

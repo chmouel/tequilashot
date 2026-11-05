@@ -91,11 +91,26 @@ type app struct {
 	stopLatched bool
 }
 
+// Data sources and staging hooks; the demo build swaps them for staged
+// content so documentation screenshots never show a real desktop.
+var (
+	listMonitors  = sway.ListMonitors
+	listWindows   = sway.ListWindows
+	grabThumbnail = func(ctx context.Context, output string) ([]byte, error) {
+		return exec.CommandContext(ctx, "grim", "-o", output, "-s", "0.1", "-t", "jpeg", "-q", "70", "-").Output() //nolint:gosec
+	}
+	demoSettings func(*Settings) bool
+	demoStage    func(*app)
+)
+
 // Run opens the dialogue and blocks until the application exits.
 func Run(b Backend) error {
 	a := &app{b: b, winIdx: -1, thumbs: map[string]*gtk.Picture{}, inflight: map[string]bool{}}
 	a.settingsPath, _ = settingsPath()
 	a.settings = LoadSettings(a.settingsPath)
+	if demoSettings != nil && demoSettings(&a.settings) {
+		a.settingsPath = ""
+	}
 	a.monName = a.settings.Monitor
 
 	a.gtkApp = adw.NewApplication(appID, gio.ApplicationFlagsNone)
@@ -110,6 +125,9 @@ func (a *app) activate() {
 	if !a.started {
 		a.started = true
 		a.build()
+		if demoStage != nil {
+			defer demoStage(a)
+		}
 		a.gtkApp.Hold()
 	}
 
@@ -440,8 +458,8 @@ func (a *app) refresh() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		mons, merr := sway.ListMonitors(ctx)
-		wins, werr := sway.ListWindows(ctx)
+		mons, merr := listMonitors(ctx)
+		wins, werr := listWindows(ctx)
 		glib.IdleAdd(func() {
 			if merr != nil {
 				log.Printf("monitors: %v", merr)
@@ -522,7 +540,7 @@ func (a *app) captureThumb(output string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		data, err := exec.CommandContext(ctx, "grim", "-o", output, "-s", "0.1", "-t", "jpeg", "-q", "70", "-").Output() //nolint:gosec
+		data, err := grabThumbnail(ctx, output)
 		glib.IdleAdd(func() {
 			delete(a.inflight, output)
 			pic := a.thumbs[output]
