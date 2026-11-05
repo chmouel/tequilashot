@@ -83,6 +83,12 @@ aurs:
     maintainers:
       - "Chmouel Boudjnah <chmouel@chmouel.com>"
     license: Apache 2.0
+    provides:
+      - tequilashot
+    conflicts:
+      - tequilashot
+      - sway-easyshot
+      - sway-easyshot-bin
     private_key: "{{ .Env.AUR_PRIVATE_KEY }}"
     git_url: ssh://aur@aur.archlinux.org/tequilashot-bin.git
     package: |-
