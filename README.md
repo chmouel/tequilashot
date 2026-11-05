@@ -8,6 +8,7 @@ A screenshot and screen recording utility for Sway/Wayland.
 
 - Screenshot capture (window, screen, or selection)
 - Screen recording with gpu-screen-recorder (hardware-accelerated, saved directly as MP4)
+- Optional webcam picture-in-picture overlay on recordings
 - Clipboard integration
 - Image editing with satty
 - Waybar status integration
@@ -82,6 +83,10 @@ sway-easyshot movie-current-window
 sway-easyshot movie-screen --audio              # with desktop sound
 sway-easyshot movie-screen --mic                # with the microphone
 sway-easyshot movie-screen --audio --mic        # both, mixed into one track
+sway-easyshot movie-screen --mic-device alsa_input.usb-Razer_Seiren-00.mono-fallback
+sway-easyshot movie-screen --camera             # webcam in the bottom-right corner
+sway-easyshot movie-selection -C --camera-position top-left --camera-size large --camera-mirror
+sway-easyshot movie-screen -C --camera-device /dev/video2
 sway-easyshot stop-recording
 sway-easyshot pause-recording
 sway-easyshot toggle-record
@@ -99,12 +104,49 @@ sway-easyshot obs-toggle-recording
 sway-easyshot obs-toggle-pause
 ```
 
+## Microphone Selection
+
+By default `--mic` records the system's default input. `--mic-device` names a
+particular microphone by the id that `gpu-screen-recorder --list-audio-devices`
+prints before the `|`; giving it without `--mic` switches the microphone on.
+The flag is accepted by `movie-selection`, `movie-screen`,
+`movie-current-window` and `toggle-record`. A device that is not currently
+present is refused before the countdown begins.
+
+## Webcam Overlay
+
+`movie-selection`, `movie-screen`, `movie-current-window` and `toggle-record`
+accept these flags:
+
+- `--camera`, `-C` overlays the webcam on the recording.
+- `--camera-device` names the device, such as `/dev/video0`; by default the
+  first camera that `gpu-screen-recorder --list-v4l2-devices` reports.
+- `--camera-position` is `top-left`, `top-right`, `bottom-left` or
+  `bottom-right` (the default).
+- `--camera-size` is `small` (15 % of the video width), `medium` (25 %, the
+  default) or `large` (35 %).
+- `--camera-mirror` flips the image horizontally.
+
+The camera is composited by `gpu-screen-recorder` itself, so no extra
+dependency is needed. A webcam can usually serve only one application at a
+time: if another program holds it, the recording fails to start and the
+reason is reported. Start requests wait without a time limit for the
+selection and countdown to finish.
+
 ## Recording Dialogue
 
 `sway-easyshot record-gui` opens a small libadwaita window in which to choose
 the source (a monitor with a live thumbnail, an open window, or a region), the
-audio sources (desktop sound, microphone) and a countdown of 0, 3, 5 or 10
-seconds. Escape closes the window and Enter starts recording. The choices are
+audio sources (desktop sound, microphone; when the microphone is on, a
+Microphone selector offers the system default or any detected input), an optional webcam overlay and a
+countdown of 0, 3, 5 or 10 seconds. The Camera button appears only when a
+webcam is found; switching it on reveals a live layout preview, in which the
+camera picture sits over the chosen source exactly where it will appear in the
+recording. Click the preview (or use the arrow keys) to move the camera to the
+nearest corner, and choose the device, the size (small, medium or large) and
+whether to mirror the image. The preview uses the camera only whilst the window
+is showing the setup page, and releases it before recording begins. Escape
+closes the window and Enter starts recording. The choices are
 remembered in `$XDG_CONFIG_HOME/sway-easyshot/record-gui.json`
 (`~/.config` when unset).
 
@@ -132,6 +174,14 @@ which other clients may use as well:
   bypassing the interactive selection when present.
 - `movie-geometry` is a new action recording the `geometry` option, given in
   slurp form (`"X,Y WxH"`). It honours `delay`, `audio` and `mic`.
+- `mic_device` (string, on any recording start) names the microphone to use
+  when `mic` is set; it takes an id as for `--mic-device`. An empty value
+  selects the default input, and an unknown device is refused before anything
+  starts.
+- `camera` (boolean, on any recording start) overlays the webcam; it is
+  accompanied by the optional `camera_device`, `camera_position`,
+  `camera_size` and `camera_mirror`, which take the values of the matching
+  command-line flags. Invalid values are refused before anything starts.
 - `quiet_finish` (boolean, on any recording start) tells the daemon that the
   client presents the result itself. When such a recording stops, the daemon
   sends only a brief "Recording saved" notification, without the copy, show,

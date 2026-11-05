@@ -14,6 +14,7 @@ import (
 
 	"sway-easyshot/internal/config"
 	"sway-easyshot/internal/daemon"
+	"sway-easyshot/internal/external"
 	"sway-easyshot/internal/state"
 	"sway-easyshot/pkg/protocol"
 
@@ -165,7 +166,7 @@ func movieSelectionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "movie-selection",
 		Usage: "Record video of selection",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.IntFlag{
 				Name:    "delay",
 				Aliases: []string{"w"},
@@ -182,7 +183,11 @@ func movieSelectionCommand() *cli.Command {
 				Aliases: []string{"m"},
 				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
-		},
+			&cli.StringFlag{
+				Name:  "mic-device",
+				Usage: "Microphone device id from gpu-screen-recorder --list-audio-devices (implies --mic)",
+			},
+		}, cameraFlags()...),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -196,14 +201,14 @@ func movieSelectionCommand() *cli.Command {
 			req := protocol.Request{
 				Command: "execute",
 				Action:  "movie-selection",
-				Options: map[string]interface{}{
+				Options: withMicOptions(c, withCameraOptions(c, map[string]interface{}{
 					"delay": c.Int("delay"),
 					"audio": c.Bool("audio"),
 					"mic":   c.Bool("mic"),
-				},
+				})),
 			}
 
-			return sendAndHandleRequest(cfg.SocketPath, req)
+			return sendAndHandleStartRequest(cfg.SocketPath, req)
 		},
 	}
 }
@@ -212,7 +217,7 @@ func movieScreenCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "movie-screen",
 		Usage: "Record video of screen",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.IntFlag{
 				Name:    "delay",
 				Aliases: []string{"w"},
@@ -240,7 +245,11 @@ func movieScreenCommand() *cli.Command {
 				Aliases: []string{"m"},
 				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
-		},
+			&cli.StringFlag{
+				Name:  "mic-device",
+				Usage: "Microphone device id from gpu-screen-recorder --list-audio-devices (implies --mic)",
+			},
+		}, cameraFlags()...),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -254,16 +263,16 @@ func movieScreenCommand() *cli.Command {
 			req := protocol.Request{
 				Command: "execute",
 				Action:  "movie-screen",
-				Options: map[string]interface{}{
+				Options: withMicOptions(c, withCameraOptions(c, map[string]interface{}{
 					"delay":              c.Int("delay"),
 					"use_current_screen": c.Bool("current-screen"),
 					"crop_top":           c.Int("crop-top"),
 					"audio":              c.Bool("audio"),
 					"mic":                c.Bool("mic"),
-				},
+				})),
 			}
 
-			return sendAndHandleRequest(cfg.SocketPath, req)
+			return sendAndHandleStartRequest(cfg.SocketPath, req)
 		},
 	}
 }
@@ -272,7 +281,7 @@ func movieCurrentWindowCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "movie-current-window",
 		Usage: "Record video of focused window",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.IntFlag{
 				Name:    "delay",
 				Aliases: []string{"w"},
@@ -289,7 +298,11 @@ func movieCurrentWindowCommand() *cli.Command {
 				Aliases: []string{"m"},
 				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
-		},
+			&cli.StringFlag{
+				Name:  "mic-device",
+				Usage: "Microphone device id from gpu-screen-recorder --list-audio-devices (implies --mic)",
+			},
+		}, cameraFlags()...),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -303,14 +316,14 @@ func movieCurrentWindowCommand() *cli.Command {
 			req := protocol.Request{
 				Command: "execute",
 				Action:  "movie-current-window",
-				Options: map[string]interface{}{
+				Options: withMicOptions(c, withCameraOptions(c, map[string]interface{}{
 					"delay": c.Int("delay"),
 					"audio": c.Bool("audio"),
 					"mic":   c.Bool("mic"),
-				},
+				})),
 			}
 
-			return sendAndHandleRequest(cfg.SocketPath, req)
+			return sendAndHandleStartRequest(cfg.SocketPath, req)
 		},
 	}
 }
@@ -327,7 +340,7 @@ func toggleRecordCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "toggle-record",
 		Usage: "Toggle recording (start if not recording, stop if recording)",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:    "start-action",
 				Aliases: []string{"a"},
@@ -361,7 +374,11 @@ func toggleRecordCommand() *cli.Command {
 				Aliases: []string{"m"},
 				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
-		},
+			&cli.StringFlag{
+				Name:  "mic-device",
+				Usage: "Microphone device id from gpu-screen-recorder --list-audio-devices (implies --mic)",
+			},
+		}, cameraFlags()...),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -375,22 +392,74 @@ func toggleRecordCommand() *cli.Command {
 			req := protocol.Request{
 				Command: "execute",
 				Action:  "toggle-record",
-				Options: map[string]interface{}{
+				Options: withMicOptions(c, withCameraOptions(c, map[string]interface{}{
 					"start_action":       c.String("start-action"),
 					"delay":              c.Int("delay"),
 					"use_current_screen": c.Bool("current-screen"),
 					"crop_top":           c.Int("crop-top"),
 					"audio":              c.Bool("audio"),
 					"mic":                c.Bool("mic"),
-				},
+				})),
 			}
 
-			return sendAndHandleRequest(cfg.SocketPath, req)
+			// No client deadline: stopping may wait up to 30 s for the notification choice and file finalisation.
+			return sendAndHandleStartRequest(cfg.SocketPath, req)
 		},
 	}
 }
 
 // Helper functions for command creation
+
+func cameraFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "camera",
+			Aliases: []string{"C"},
+			Usage:   "Overlay the webcam as a picture-in-picture (the camera must not be in use elsewhere)",
+		},
+		&cli.StringFlag{
+			Name:  "camera-device",
+			Usage: "Camera device, such as /dev/video0 (default: the first camera found)",
+		},
+		&cli.StringFlag{
+			Name:  "camera-position",
+			Usage: "Corner for the camera: top-left, top-right, bottom-left or bottom-right",
+			Value: external.CameraBottomRight,
+		},
+		&cli.StringFlag{
+			Name:  "camera-size",
+			Usage: "Size of the camera: small, medium or large",
+			Value: external.CameraMedium,
+		},
+		&cli.BoolFlag{
+			Name:  "camera-mirror",
+			Usage: "Mirror the camera image horizontally",
+		},
+	}
+}
+
+// withMicOptions adds the microphone device to a start request; naming a
+// device turns the microphone on.
+func withMicOptions(c *cli.Command, options map[string]interface{}) map[string]interface{} {
+	if dev := c.String("mic-device"); dev != "" {
+		options["mic"] = true
+		options["mic_device"] = dev
+	}
+	return options
+}
+
+// withCameraOptions adds the camera options to a start request when --camera is set.
+func withCameraOptions(c *cli.Command, options map[string]interface{}) map[string]interface{} {
+	if !c.Bool("camera") {
+		return options
+	}
+	options["camera"] = true
+	options["camera_device"] = c.String("camera-device")
+	options["camera_position"] = c.String("camera-position")
+	options["camera_size"] = c.String("camera-size")
+	options["camera_mirror"] = c.Bool("camera-mirror")
+	return options
+}
 
 func createSimpleCommand(name, usage string) *cli.Command {
 	return &cli.Command{
@@ -477,7 +546,16 @@ func ensureDaemonRunning(cfg *config.Config) error {
 }
 
 func sendAndHandleRequest(socketPath string, req protocol.Request) error {
-	resp, err := sendRequest(socketPath, req)
+	return handleResponse(sendRequest(socketPath, req))
+}
+
+// sendAndHandleStartRequest sends a request that may start a recording, which
+// waits on interactive selection and the countdown for an unbounded time.
+func sendAndHandleStartRequest(socketPath string, req protocol.Request) error {
+	return handleResponse(sendRequestTimeout(socketPath, req, 0))
+}
+
+func handleResponse(resp *protocol.Response, err error) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}

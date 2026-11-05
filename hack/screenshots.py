@@ -18,7 +18,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / ".github" / "screenshots"
@@ -125,6 +125,36 @@ def mock_desktop(w, h, seed, wall):
     return desk.convert("RGB")
 
 
+def mock_camera_tile(frame):
+    """Draw a stand-in webcam overlay (a silhouette, no real footage) bottom-right."""
+    w, h = frame.size
+    tw, th = int(w * 0.25), int(w * 0.25 * 9 / 16)
+    x, y = w - tw - int(w * 0.02), h - th - int(h * 0.03)
+    scale = 3  # supersample for smooth edges
+    tile = gradient(tw * scale, th * scale, [(0.0, (71, 85, 105)), (1.0, (30, 41, 59))], angle_vertical=True).convert("RGBA")
+    d = ImageDraw.Draw(tile)
+    cx = tile.width // 2
+    d.ellipse((cx - th * scale * 0.30, th * scale * 0.52, cx + th * scale * 0.30, th * scale * 1.25), fill=(148, 163, 184, 255))
+    d.ellipse((cx - th * scale * 0.17, th * scale * 0.14, cx + th * scale * 0.17, th * scale * 0.60), fill=(203, 213, 225, 255))
+    tile = tile.resize((tw, th), Image.LANCZOS)
+    mask = Image.new("L", (tw * scale, th * scale), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, tw * scale - 1, th * scale - 1), radius=18 * scale, fill=255)
+    tile.putalpha(mask.resize((tw, th), Image.LANCZOS))
+    out = frame.convert("RGBA")
+    out.alpha_composite(tile, (x, y))
+    return out.convert("RGB")
+
+
+def mock_camera_picture(w=640, h=360):
+    """Draw a stand-in webcam picture (a silhouette, no real footage)."""
+    tile = gradient(w, h, [(0.0, (71, 85, 105)), (1.0, (30, 41, 59))], angle_vertical=True).convert("RGB")
+    d = ImageDraw.Draw(tile)
+    cx = w // 2
+    d.ellipse((cx - h * 0.30, h * 0.52, cx + h * 0.30, h * 1.25), fill=(148, 163, 184))
+    d.ellipse((cx - h * 0.17, h * 0.14, cx + h * 0.17, h * 0.60), fill=(203, 213, 225))
+    return tile
+
+
 def stage_assets(tmp):
     walls = {
         "DP-1": [(0.0, (49, 46, 129)), (0.6, (109, 40, 217)), (1.0, (219, 39, 119))],
@@ -132,7 +162,8 @@ def stage_assets(tmp):
     }
     for i, (name, wall) in enumerate(walls.items()):
         mock_desktop(960, 540, i + 3, wall).save(tmp / f"{name}.jpg", quality=92)
-    frame = mock_desktop(1920, 1080, 3, walls["DP-1"])
+    mock_camera_picture().save(tmp / "camera.jpg", quality=92)
+    frame = mock_camera_tile(mock_desktop(1920, 1080, 3, walls["DP-1"]))
     frame.save(tmp / "frame.png")
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-loop", "1", "-framerate", "2", "-i", str(tmp / "frame.png"),
                     "-t", "42", "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -148,8 +179,46 @@ def hypr_window():
     return None
 
 
+def visible_and_on_top(win):
+    """True when the dialogue is shown and nothing can be drawn above it.
+
+    grim captures a screen region, not a window, so anything covering the
+    dialogue (or a workspace switch) would leak real desktop content. The
+    dialogue floats, which keeps it above tiled windows; any other floating
+    window overlapping it makes the capture unsafe.
+    """
+    if win is None or not win.get("floating"):
+        return False
+    monitors = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout)
+    if win["workspace"]["id"] not in {m["activeWorkspace"]["id"] for m in monitors}:
+        return False
+    (x, y), (w, h) = win["at"], win["size"]
+    clients = json.loads(subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True).stdout)
+    for c in clients:
+        if c["address"] == win["address"] or not c.get("mapped", True) or c.get("hidden"):
+            continue
+        if not (c.get("floating") or c.get("pinned")):
+            continue
+        if not (c.get("pinned") or c["workspace"]["id"] == win["workspace"]["id"]):
+            continue
+        (cx, cy), (cw, ch) = c["at"], c["size"]
+        if cx < x + w and x < cx + cw and cy < y + h and y < cy + ch:
+            return False
+    return True
+
+
+def looks_like_dialogue(img):
+    """The left part of a prefer-dark libadwaita header bar is plain and dark."""
+    strip = img.convert("L").crop((8, 8, img.width // 4, 30))
+    lo, hi = strip.getextrema()
+    mean = ImageStat.Stat(strip).mean[0]
+    return hi - lo < 25 and mean < 80
+
+
 def capture(binary, tmp, page):
-    env = dict(os.environ, SWAY_EASYSHOT_DEMO=page, SWAY_EASYSHOT_DEMO_DIR=str(tmp))
+    # Pin the dark style so the images do not depend on the desktop colour scheme.
+    env = dict(os.environ, SWAY_EASYSHOT_DEMO=page, SWAY_EASYSHOT_DEMO_DIR=str(tmp),
+               ADW_DEBUG_COLOR_SCHEME="prefer-dark")
     proc = subprocess.Popen([binary, "record-gui"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         win = None
@@ -162,13 +231,30 @@ def capture(binary, tmp, page):
             sys.exit(f"record-gui window for {page!r} never appeared")
         time.sleep(2.5)  # thumbnails, staged selection and preview frame
         win = hypr_window()
+        if not visible_and_on_top(win):
+            sys.exit(f"{page!r}: the dialogue is hidden or overlapped by another window; "
+                     "leave the desktop alone while screenshots are taken. Nothing was written.")
         (x, y), (w, h) = win["at"], win["size"]
         shot = tmp / f"{page}.png"
         subprocess.run(["grim", "-g", f"{x},{y} {w}x{h}", str(shot)], check=True)
-        return Image.open(shot).convert("RGBA")
+        after = hypr_window()
+        img = Image.open(shot).convert("RGBA")
+        problems = []
+        if not visible_and_on_top(after):
+            problems.append("hidden or overlapped after capture")
+        if after and (after["at"], after["size"]) != (win["at"], win["size"]):
+            problems.append(f"moved from {win['at']} {win['size']} to {after['at']} {after['size']}")
+        if not looks_like_dialogue(img):
+            problems.append("header bar not recognised")
+        if problems:
+            sys.exit(f"{page!r}: unsafe capture ({'; '.join(problems)}); aborting. Nothing was written.")
+        return img
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+        # Let the single-instance D-Bus name go, or the next run would merely
+        # activate this dying instance and exit.
+        time.sleep(1.5)
 
 
 def rounded(img, radius=WINDOW_RADIUS):
@@ -194,15 +280,19 @@ def backdrop(w, h, seed):
 
 
 def hero(shots):
-    order = ["monitor", "window", "result"]
-    wins = [rounded(shots[p]) for p in order]
+    """Wide camera-enabled setup on top, window picker and result card below."""
+    top = rounded(shots["monitor"])
+    bottom = [rounded(shots[p]) for p in ("window", "result")]
     gap, margin = 56, 72
-    w = sum(i.width for i in wins) + gap * (len(wins) - 1) + margin * 2
-    h = max(i.height for i in wins) + margin * 2 + 20
+    bottom_w = sum(i.width for i in bottom) + gap
+    w = max(top.width, bottom_w) + margin * 2
+    bottom_h = max(i.height for i in bottom)
+    h = margin + top.height + gap + bottom_h + margin + 20
     canvas = backdrop(w, h, 11)
-    x, tallest = margin, max(i.height for i in wins)
-    for win in wins:
-        paste_with_shadow(canvas, win, (x, margin + (tallest - win.height) // 2))
+    paste_with_shadow(canvas, top, ((w - top.width) // 2, margin))
+    x, y = (w - bottom_w) // 2, margin + top.height + gap
+    for win in bottom:
+        paste_with_shadow(canvas, win, (x, y + (bottom_h - win.height) // 2))
         x += win.width + gap
     return canvas.convert("RGB")
 
@@ -222,22 +312,38 @@ def logo(size):
 def social(shots):
     w, h = 1280, 640
     canvas = backdrop(w, h, 5)
-    canvas.alpha_composite(logo(96), (72, 96))
     d = ImageDraw.Draw(canvas)
-    d.text((72, 222), "sway-easyshot", font=font(76, "Bold"), fill="white")
-    tagline = "Screenshots and GPU-accelerated screen\nrecordings for sway and Hyprland"
-    d.multiline_text((74, 324), tagline, font=font(30, "Medium"), fill=(255, 255, 255, 235), spacing=10)
-    x, y = 74, 438
-    chip_font = font(22, "SemiBold")
-    for chip in ("Hyprland", "sway", "GTK4", "gpu-screen-recorder"):
-        tw = d.textlength(chip, font=chip_font)
-        d.rounded_rectangle((x, y, x + tw + 32, y + 44), radius=22, fill=(20, 12, 46, 150))
-        d.text((x + 16, y + 9), chip, font=chip_font, fill="white")
-        x += tw + 32 + 12
+    left, right_edge = 72, 0
+
+    def text(xy, value, fnt, **kw):
+        nonlocal right_edge
+        box = d.multiline_textbbox(xy, value, font=fnt, **{k: v for k, v in kw.items() if k == "spacing"})
+        right_edge = max(right_edge, box[2])
+        d.multiline_text(xy, value, font=fnt, **kw)
+        return box
+
+    canvas.alpha_composite(logo(88), (left, 84))
+    text((left, 196), "sway-easyshot", font(68, "Bold"), fill="white")
+    text((left + 2, 290), "Screenshots and GPU-accelerated\nscreen recordings for sway\nand Hyprland",
+         font(28, "Medium"), fill=(255, 255, 255, 235), spacing=8)
+
+    chip_font = font(21, "SemiBold")
+    x, y = left + 2, 432
+    for row in (("Hyprland", "sway", "GTK4"), ("gpu-screen-recorder", "webcam overlay")):
+        for chip in row:
+            tw = d.textlength(chip, font=chip_font)
+            d.rounded_rectangle((x, y, x + tw + 30, y + 42), radius=21, fill=(20, 12, 46, 150))
+            d.text((x + 15, y + 9), chip, font=chip_font, fill="white")
+            right_edge = max(right_edge, x + tw + 30)
+            x += tw + 30 + 10
+        x, y = left + 2, y + 52
+
+    # Fit the dialogue into whatever the text leaves free on the right.
     win = rounded(shots["monitor"])
-    scale = (h - 70) / win.height
+    room = w - right_edge - 48 - 48
+    scale = min((h - 80) / win.height, room / win.width)
     win = win.resize((int(win.width * scale), int(win.height * scale)), Image.LANCZOS)
-    paste_with_shadow(canvas, win, (w - win.width - 64, (h - win.height) // 2))
+    paste_with_shadow(canvas, win, (w - win.width - 48, (h - win.height) // 2))
     return canvas.convert("RGB")
 
 

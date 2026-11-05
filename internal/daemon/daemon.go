@@ -147,6 +147,7 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	useCurrentScreen := false
 	cropTop := 0
 	var audio external.AudioSources
+	var camera cameraRequest
 	var output, geometry string
 
 	if req.Options != nil {
@@ -171,12 +172,22 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 		if m, ok := req.Options["mic"].(bool); ok {
 			audio.Mic = m
 		}
+		var micErr error
+		if audio.MicDevice, micErr = parseMicDevice(req.Options); micErr != nil {
+			return protocol.Response{Success: false, Message: micErr.Error()}
+		}
+		var camErr error
+		if camera, camErr = parseCameraRequest(req.Options); camErr != nil {
+			return protocol.Response{Success: false, Message: camErr.Error()}
+		}
 		if q, ok := req.Options["quiet_finish"].(bool); ok && q {
 			ctx = commands.WithQuietFinish(ctx)
 		}
 	}
 
 	var err error
+
+	opts := commands.RecordOptions{Audio: audio, UseCamera: camera.enabled, Camera: camera.overlay}
 
 	switch req.Action {
 	// Screenshot commands
@@ -200,20 +211,20 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 
 	// Recording commands
 	case "movie-selection":
-		err = d.recordingHandler.MovieSelection(ctx, delay, audio)
+		err = d.recordingHandler.MovieSelection(ctx, delay, opts)
 
 	case "movie-screen":
 		if output != "" {
-			err = d.recordingHandler.MovieOutput(ctx, delay, output, cropTop, audio)
+			err = d.recordingHandler.MovieOutput(ctx, delay, output, cropTop, opts)
 		} else {
-			err = d.recordingHandler.MovieScreen(ctx, delay, useCurrentScreen, cropTop, audio)
+			err = d.recordingHandler.MovieScreen(ctx, delay, useCurrentScreen, cropTop, opts)
 		}
 
 	case "movie-geometry":
-		err = d.recordingHandler.MovieGeometry(ctx, delay, geometry, audio)
+		err = d.recordingHandler.MovieGeometry(ctx, delay, geometry, opts)
 
 	case "movie-current-window":
-		err = d.recordingHandler.MovieCurrentWindow(ctx, delay, audio)
+		err = d.recordingHandler.MovieCurrentWindow(ctx, delay, opts)
 
 	case "stop-recording":
 		err = d.recordingHandler.StopRecording(ctx)
@@ -228,7 +239,7 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 				startAction = sa
 			}
 		}
-		err = d.recordingHandler.ToggleRecord(ctx, startAction, delay, useCurrentScreen, cropTop, audio)
+		err = d.recordingHandler.ToggleRecord(ctx, startAction, delay, useCurrentScreen, cropTop, opts)
 
 	// OBS commands
 	case "obs-toggle-recording":
@@ -316,4 +327,67 @@ func (d *Daemon) cleanup() {
 	if err := external.CleanupOldFiles(d.ctx, d.cfg.SaveLocation, d.cfg.CleanupTime); err != nil {
 		log.Printf("Cleanup error: %v", err)
 	}
+}
+
+// parseMicDevice reads the optional mic_device request option.
+func parseMicDevice(options map[string]any) (string, error) {
+	v, ok := options["mic_device"]
+	if !ok {
+		return "", nil
+	}
+	dev, isString := v.(string)
+	if !isString {
+		return "", fmt.Errorf("option mic_device must be a string")
+	}
+	return dev, nil
+}
+
+// cameraRequest is the webcam overlay part of a start request.
+type cameraRequest struct {
+	enabled bool
+	overlay external.CameraOverlay
+}
+
+// parseCameraRequest reads the optional camera_* request options and rejects
+// any that are present with the wrong type. Values are validated when the
+// recording starts.
+func parseCameraRequest(options map[string]any) (cameraRequest, error) {
+	var req cameraRequest
+	var on, mirror bool
+	var device, position, size string
+	for _, f := range []struct {
+		key string
+		dst any
+	}{
+		{"camera", &on},
+		{"camera_device", &device},
+		{"camera_position", &position},
+		{"camera_size", &size},
+		{"camera_mirror", &mirror},
+	} {
+		v, ok := options[f.key]
+		if !ok {
+			continue
+		}
+		switch dst := f.dst.(type) {
+		case *bool:
+			b, isBool := v.(bool)
+			if !isBool {
+				return req, fmt.Errorf("option %s must be a boolean", f.key)
+			}
+			*dst = b
+		case *string:
+			str, isString := v.(string)
+			if !isString {
+				return req, fmt.Errorf("option %s must be a string", f.key)
+			}
+			*dst = str
+		}
+	}
+	if !on {
+		return req, nil
+	}
+	req.enabled = true
+	req.overlay = external.CameraOverlay{Device: device, Position: position, Size: size, Mirror: mirror}
+	return req, nil
 }

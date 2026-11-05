@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -80,6 +81,9 @@ const maxRecordingWidth = 1920
 type AudioSources struct {
 	Desktop bool
 	Mic     bool
+	// MicDevice is a device id from gpu-screen-recorder --list-audio-devices;
+	// empty selects the system default input.
+	MicDevice string
 }
 
 // gsrSource returns the gpu-screen-recorder -a value, mixing both devices into one track.
@@ -89,29 +93,79 @@ func (a AudioSources) gsrSource() string {
 		sources = append(sources, "default_output")
 	}
 	if a.Mic {
-		sources = append(sources, "default_input")
+		if a.MicDevice != "" {
+			sources = append(sources, "device:"+a.MicDevice)
+		} else {
+			sources = append(sources, "default_input")
+		}
 	}
 	return strings.Join(sources, "|")
 }
 
 // StartGpuScreenRecorder starts recording an output or a slurp-style
-// "X,Y WxH" geometry straight to an MP4 file.
-func StartGpuScreenRecorder(ctx context.Context, geometry, output, filename string, audio AudioSources) (*exec.Cmd, error) {
+// "X,Y WxH" geometry straight to an MP4 file, optionally with a webcam overlay.
+// The recorder's stderr is copied to stderr as well as to the daemon's own.
+func StartGpuScreenRecorder(ctx context.Context, geometry, output, filename string, audio AudioSources, camera CameraOverlay, stderr io.Writer) (*exec.Cmd, error) {
+	var outW, outH int
+	if geometry == "" && output != "" {
+		outW, outH = gsrOutputSize(ctx, output)
+	}
+
+	args, err := gsrArgs(geometry, output, filename, outW, outH, audio, camera)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, "gpu-screen-recorder", args...) //nolint:gosec
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if stderr != nil {
+		cmd.Stderr = io.MultiWriter(os.Stderr, stderr)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	return cmd, nil
+}
+
+// gsrArgs builds the gpu-screen-recorder arguments; outW and outH are the
+// known size of the recorded output, or zero.
+func gsrArgs(geometry, output, filename string, outW, outH int, audio AudioSources, camera CameraOverlay) ([]string, error) {
+	if err := ValidateMicDevice(audio.MicDevice); err != nil {
+		return nil, err
+	}
+	if camera.Enabled() {
+		if err := camera.Validate(); err != nil {
+			return nil, err
+		}
+	}
+
 	args := []string{"-f", "60", "-c", "mp4", "-o", filename}
 
-	var w, h int
+	var base string
+	var x, y int
+	w, h := outW, outH
 	switch {
 	case geometry != "":
-		var x, y int
 		if _, err := fmt.Sscanf(geometry, "%d,%d %dx%d", &x, &y, &w, &h); err != nil {
 			return nil, fmt.Errorf("invalid geometry %q: %w", geometry, err)
 		}
-		args = append(args, "-w", "region", "-region", fmt.Sprintf("%dx%d+%d+%d", w, h, x, y))
+		base = "region"
 	case output != "":
-		args = append(args, "-w", output)
-		w, h = gsrOutputSize(ctx, output)
+		base = output
 	default:
 		return nil, fmt.Errorf("no geometry or output to record")
+	}
+
+	source := base
+	if camera.Enabled() {
+		source += "|" + camera.gsrSource()
+	}
+	args = append(args, "-w", source)
+	if geometry != "" {
+		args = append(args, "-region", fmt.Sprintf("%dx%d+%d+%d", w, h, x, y))
 	}
 
 	if w > maxRecordingWidth {
@@ -122,15 +176,7 @@ func StartGpuScreenRecorder(ctx context.Context, geometry, output, filename stri
 		args = append(args, "-a", src)
 	}
 
-	cmd := exec.CommandContext(ctx, "gpu-screen-recorder", args...) //nolint:gosec
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	return cmd, nil
+	return args, nil
 }
 
 // gsrOutputSize returns the size gpu-screen-recorder reports for a monitor, or zeros if unknown.

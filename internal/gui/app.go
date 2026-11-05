@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"sway-easyshot/internal/external"
 	"sway-easyshot/internal/sway"
 	"sway-easyshot/pkg/protocol"
 
@@ -50,6 +51,12 @@ flowboxchild.er-tilechild { border-radius: 14px; padding: 2px; background: none;
 flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); box-shadow: inset 0 0 0 2px @accent_bg_color; }
 .er-pill { border-radius: 999px; padding: 10px 20px; opacity: 0.65; }
 .er-pill:checked { opacity: 1; background: @accent_bg_color; color: @accent_fg_color; }
+.er-layout { border-radius: 12px; background: #1e293b; }
+.er-layout:focus-visible { outline: 2px solid @accent_bg_color; outline-offset: 2px; }
+.er-prevholder { background: #1e293b; color: #94a3b8; }
+.er-camtile { border-radius: 6px; background: #334155; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px @accent_bg_color; }
+.er-cammsg { font-size: 0.7em; color: #cbd5e1; }
+.er-mirror { transform: scale(-1, 1); }
 .er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
 .er-section { font-weight: 700; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.04em; }
 `
@@ -64,14 +71,51 @@ type app struct {
 	settings     Settings
 	settingsPath string
 
-	srcButtons map[string]*gtk.ToggleButton
-	stack      *gtk.Stack
-	flow       *gtk.FlowBox
-	crop       *gtk.SpinButton
-	winList    *gtk.ListBox
-	desktop    *gtk.ToggleButton
-	mic        *gtk.ToggleButton
-	countdown  map[int]*gtk.ToggleButton
+	srcButtons  map[string]*gtk.ToggleButton
+	stack       *gtk.Stack
+	flow        *gtk.FlowBox
+	crop        *gtk.SpinButton
+	winList     *gtk.ListBox
+	desktop     *gtk.ToggleButton
+	mic         *gtk.ToggleButton
+	micRow      *adw.ComboRow
+	micRevealer *gtk.Revealer
+	mics        []external.AudioDevice
+	micSel      string
+	// micsKnown is set once the first microphone probe has finished, so a saved
+	// device is never sent before its fallback has had a chance to apply.
+	micsKnown  bool
+	micDefault string
+	// micPopulating suppresses microphone selection handling whilst the list is filled.
+	micPopulating bool
+	countdown     map[int]*gtk.ToggleButton
+
+	camera         *gtk.ToggleButton
+	cameraRevealer *gtk.Revealer
+	cameraBox      *gtk.Box
+	sizeBtns       map[string]*gtk.ToggleButton
+	mirror         *adw.SwitchRow
+	camRow         *adw.ComboRow
+	cameras        []string
+	camModes       []external.CameraMode
+	camSel         string
+	camPos         string
+	camSize        string
+
+	prevOverlay *gtk.Overlay
+	prevBase    *gtk.Stack
+	prevThumb   *gtk.Picture
+	prevHolder  *gtk.Label
+	camTile     *gtk.Overlay
+	camPic      *gtk.Picture
+	camMsg      *gtk.Label
+	preview     *external.Preview
+	gate        external.PreviewGate
+	// camPopulating suppresses camera selection handling whilst the list is filled.
+	camPopulating bool
+	closing       bool
+	previewDev    string
+	previewGen    int
 
 	monitors []sway.Monitor
 	windows  []sway.Window
@@ -99,8 +143,10 @@ var (
 	grabThumbnail = func(ctx context.Context, output string) ([]byte, error) {
 		return exec.CommandContext(ctx, "grim", "-o", output, "-s", "0.1", "-t", "jpeg", "-q", "70", "-").Output() //nolint:gosec
 	}
-	demoSettings func(*Settings) bool
-	demoStage    func(*app)
+	// recordingDisabled is set by the demo build so that it can never record.
+	recordingDisabled bool
+	demoSettings      func(*Settings) bool
+	demoStage         func(*app)
 )
 
 // Run opens the dialogue and blocks until the application exits.
@@ -115,7 +161,12 @@ func Run(b Backend) error {
 
 	a.gtkApp = adw.NewApplication(appID, gio.ApplicationFlagsNone)
 	a.gtkApp.ConnectActivate(a.activate)
-	if code := a.gtkApp.Run([]string{os.Args[0]}); code != 0 {
+	code := a.gtkApp.Run([]string{os.Args[0]})
+	a.stopPreview()
+	if !a.gate.Wait(previewRelease) {
+		log.Print("camera preview did not exit in time")
+	}
+	if code != 0 {
 		return fmt.Errorf("record-gui exited with status %d", code)
 	}
 	return nil
@@ -157,6 +208,7 @@ func (a *app) activate() {
 		}
 		glib.IdleAdd(func() {
 			a.win.Present()
+			a.probeMics()
 			a.refresh()
 			a.updateThumbTimer()
 		})
@@ -204,10 +256,23 @@ func (a *app) build() {
 	a.win.SetDefaultSize(520, -1)
 	// A fixed-size window is floated by tiling compositors, keeping the dialogue compact.
 	a.win.SetResizable(false)
+	a.win.ConnectMap(a.syncPreview)
+	a.win.ConnectUnmap(a.stopPreview)
 	a.win.ConnectCloseRequest(func() bool {
+		if a.closing {
+			return true
+		}
+		a.closing = true
 		a.stopThumbTimer()
-		a.gtkApp.Quit()
-		return false
+		a.stopPreview()
+		// Wait for the camera off the main loop, then quit.
+		go func() {
+			if !a.gate.Wait(previewRelease) {
+				log.Print("camera preview did not exit in time")
+			}
+			glib.IdleAdd(a.gtkApp.Quit)
+		}()
+		return true
 	})
 
 	key := gtk.NewEventControllerKey()
@@ -236,6 +301,7 @@ func (a *app) build() {
 	a.win.AddController(key)
 
 	body := gtk.NewBox(gtk.OrientationVertical, 14)
+	body.SetHExpand(true)
 	body.SetMarginTop(8)
 	body.SetMarginBottom(18)
 	body.SetMarginStart(18)
@@ -243,7 +309,7 @@ func (a *app) build() {
 
 	body.Append(section("Source"))
 	body.Append(a.buildSource())
-	body.Append(section("Audio"))
+	body.Append(section("Audio & camera"))
 	body.Append(a.buildAudio())
 	body.Append(section("Countdown"))
 	body.Append(a.buildCountdown())
@@ -260,9 +326,13 @@ func (a *app) build() {
 	a.pages = gtk.NewStack()
 	a.pages.SetTransitionType(gtk.StackTransitionTypeCrossfade)
 	a.pages.SetVhomogeneous(false)
-	a.pages.AddNamed(body, pageSetup)
+	setup := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	setup.Append(body)
+	setup.Append(a.cameraRevealer)
+	a.pages.AddNamed(setup, pageSetup)
 	a.pages.AddNamed(a.buildResult(), pageResult)
 	a.pages.SetVisibleChildName(pageSetup)
+	a.pages.NotifyProperty("visible-child-name", a.syncPreview)
 
 	a.toasts = adw.NewToastOverlay()
 	a.toasts.SetChild(a.pages)
@@ -293,6 +363,7 @@ func (a *app) buildSource() *gtk.Box {
 			if b.Active() {
 				a.stack.SetVisibleChildName(id)
 				a.updateThumbTimer()
+				a.updatePreviewBase()
 			}
 		})
 		a.srcButtons[id] = b
@@ -329,6 +400,7 @@ func (a *app) buildMonitorPage() *gtk.Box {
 		if sel := a.flow.SelectedChildren(); len(sel) > 0 {
 			if i := sel[0].Index(); i >= 0 && i < len(a.monitors) {
 				a.monName = a.monitors[i].Name
+				a.updatePreviewBase()
 			}
 		}
 	})
@@ -397,13 +469,20 @@ func (a *app) pill(text string, active bool, onIcon, offIcon string) *gtk.Toggle
 }
 
 func (a *app) buildAudio() *gtk.Box {
+	outer := gtk.NewBox(gtk.OrientationVertical, 10)
 	box := gtk.NewBox(gtk.OrientationHorizontal, 10)
 	box.SetHomogeneous(true)
 	a.desktop = a.pill("Desktop sound", a.settings.Desktop, "audio-speakers-symbolic", "audio-volume-muted-symbolic")
 	a.mic = a.pill("Microphone", a.settings.Mic, "audio-input-microphone-symbolic", "microphone-disabled-symbolic")
 	box.Append(a.desktop)
 	box.Append(a.mic)
-	return box
+	box.Append(a.buildCamera())
+	outer.Append(box)
+	a.micSel = a.settings.MicDevice
+	outer.Append(a.buildMicRow())
+	a.probeCameras()
+	a.probeMics()
+	return outer
 }
 
 func (a *app) buildCountdown() *gtk.Box {
@@ -433,7 +512,10 @@ func (a *app) collect() Settings {
 		CropTop: a.crop.ValueAsInt(),
 		Desktop: a.desktop.Active(),
 		Mic:     a.mic.Active(),
+
+		MicDevice: a.micSel,
 	}
+	a.cameraSettings(&s)
 	for id, b := range a.srcButtons {
 		if b.Active() {
 			s.Source = id
@@ -527,6 +609,7 @@ func (a *app) setMonitors(mons []sway.Monitor) {
 		a.thumbs[m.Name] = pic
 		a.captureThumb(m.Name)
 	}
+	a.updatePreviewBase()
 }
 
 // captureThumb grabs one thumbnail off the main thread, never overlapping
@@ -549,6 +632,9 @@ func (a *app) captureThumb(output string) {
 			}
 			if tex, err := gdk.NewTextureFromBytes(glib.NewBytes(data)); err == nil {
 				pic.SetPaintable(tex)
+				if output == a.monName {
+					a.updatePreviewBase()
+				}
 			}
 		})
 	}()
@@ -625,7 +711,15 @@ func lastDotted(class string) string {
 }
 
 func (a *app) startRecording() {
-	if a.busy {
+	if a.busy || a.closing {
+		return
+	}
+	if a.mic.Active() && a.micSel != "" && !a.micsKnown {
+		a.toast("Checking the microphones; please press Record again in a moment")
+		return
+	}
+	if recordingDisabled {
+		a.toast("Demo mode: recording is disabled")
 		return
 	}
 	s := a.collect()
@@ -640,6 +734,7 @@ func (a *app) startRecording() {
 			sel.Geometry = chosen.Geometry()
 		}
 	}
+	sel.CameraDevice = a.camSel
 	req, err := BuildRequest(s, sel)
 	if err != nil {
 		a.toast("Pray select a " + map[string]string{SourceMonitor: "monitor", SourceWindow: "window"}[s.Source] + " first.")
@@ -660,11 +755,17 @@ func (a *app) startRecording() {
 	a.stopLatched = false
 	a.mu.Unlock()
 	a.stopThumbTimer()
+	a.stopPreview()
 	a.win.SetVisible(false)
 	go a.run(req, chosen)
 }
 
 func (a *app) run(req protocol.Request, chosen *sway.Window) {
+	// The camera must be free before the recorder opens it.
+	if !a.gate.Wait(previewRelease) {
+		a.finish(nil, errors.New("the camera is still in use"))
+		return
+	}
 	time.Sleep(hideSettle)
 
 	if err := a.b.EnsureDaemon(); err != nil {

@@ -3,9 +3,11 @@ package gui
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
+	"sway-easyshot/internal/external"
 	"sway-easyshot/pkg/protocol"
 )
 
@@ -23,12 +25,24 @@ type Settings struct {
 	CropTop   int    `json:"crop_top"`
 	Desktop   bool   `json:"desktop_audio"`
 	Mic       bool   `json:"microphone"`
+	MicDevice string `json:"mic_device"`
 	Countdown int    `json:"countdown"`
+
+	Camera         bool   `json:"camera"`
+	CameraDevice   string `json:"camera_device"`
+	CameraPosition string `json:"camera_position"`
+	CameraSize     string `json:"camera_size"`
+	CameraMirror   bool   `json:"camera_mirror"`
 }
 
 // DefaultSettings returns the settings used on first launch.
 func DefaultSettings() Settings {
-	return Settings{Source: SourceMonitor, Desktop: true}
+	return Settings{
+		Source:         SourceMonitor,
+		Desktop:        true,
+		CameraPosition: external.CameraBottomRight,
+		CameraSize:     external.CameraMedium,
+	}
 }
 
 // settingsPath locates record-gui.json under the user's configuration directory.
@@ -68,7 +82,37 @@ func LoadSettings(path string) Settings {
 	default:
 		s.Countdown = 0
 	}
+	if !external.ValidCameraPosition(s.CameraPosition) {
+		s.CameraPosition = external.CameraBottomRight
+	}
+	if !external.ValidCameraSize(s.CameraSize) {
+		s.CameraSize = external.CameraMedium
+	}
+	if !external.ValidCameraDevice(s.CameraDevice) {
+		s.CameraDevice = ""
+	}
+	if external.ValidateMicDevice(s.MicDevice) != nil {
+		s.MicDevice = ""
+	}
 	return s
+}
+
+// micLabels names the devices by description, numbering any that share one.
+func micLabels(devices []external.AudioDevice) []string {
+	count := map[string]int{}
+	for _, d := range devices {
+		count[d.Name]++
+	}
+	seen := map[string]int{}
+	labels := make([]string, len(devices))
+	for i, d := range devices {
+		labels[i] = d.Name
+		if count[d.Name] > 1 {
+			seen[d.Name]++
+			labels[i] = fmt.Sprintf("%s (%d)", d.Name, seen[d.Name])
+		}
+	}
+	return labels
 }
 
 // SaveSettings writes settings to path, creating parent directories.
@@ -87,6 +131,8 @@ func SaveSettings(path string, s Settings) error {
 type Selection struct {
 	Monitor  string
 	Geometry string
+	// CameraDevice is the camera to use; empty when none is available.
+	CameraDevice string
 }
 
 // BuildRequest converts the dialogue choices into a daemon request.
@@ -95,6 +141,16 @@ func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
 		"delay": s.Countdown,
 		"audio": s.Desktop,
 		"mic":   s.Mic,
+	}
+	if s.Mic && s.MicDevice != "" {
+		opts["mic_device"] = s.MicDevice
+	}
+	if s.Camera && sel.CameraDevice != "" {
+		opts["camera"] = true
+		opts["camera_device"] = sel.CameraDevice
+		opts["camera_position"] = s.CameraPosition
+		opts["camera_size"] = s.CameraSize
+		opts["camera_mirror"] = s.CameraMirror
 	}
 	req := protocol.Request{Command: "execute", Options: opts}
 

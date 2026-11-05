@@ -10,23 +10,47 @@ import (
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
+	"sway-easyshot/internal/external"
 	"sway-easyshot/internal/sway"
 )
 
 // The demo build stages the dialogue for documentation screenshots:
 //
 //	SWAY_EASYSHOT_DEMO=monitor|window|region|result
-//	SWAY_EASYSHOT_DEMO_DIR=dir holding DP-1.jpg, HDMI-A-1.jpg and the demoClip recording
+//	SWAY_EASYSHOT_DEMO_DIR=dir holding DP-1.jpg, HDMI-A-1.jpg, camera.jpg and the demoClip recording
 //
 // Nothing is read from or written to the real desktop or settings.
 const demoClip = "recording-20261105-13h04.mp4"
 
 func init() {
+	// A demo binary never touches the webcam nor records, staged or not.
+	dir := os.Getenv("SWAY_EASYSHOT_DEMO_DIR")
+	recordingDisabled = true
+	listCameraModes = func(context.Context) ([]external.CameraMode, error) {
+		return []external.CameraMode{{Device: "/dev/video0", Width: 1280, Height: 720, FPS: 30, Format: "mjpeg"}}, nil
+	}
+	listMics = func(context.Context) ([]external.AudioDevice, string, error) {
+		return []external.AudioDevice{
+			{ID: "studio-microphone", Name: "Studio microphone"},
+			{ID: "webcam-microphone", Name: "Webcam microphone"},
+		}, "webcam-microphone", nil
+	}
+	cameraName = func(string) string { return "Demo camera" }
+	startPreview = func(_ *external.PreviewGate, _ string, _, _ int, onFrame func([]byte), onFail func()) *external.Preview {
+		go func() {
+			if data, err := os.ReadFile(filepath.Join(dir, "camera.jpg")); err == nil {
+				onFrame(data)
+			} else {
+				onFail()
+			}
+		}()
+		return nil
+	}
+
 	page := os.Getenv("SWAY_EASYSHOT_DEMO")
 	if page == "" {
 		return
 	}
-	dir := os.Getenv("SWAY_EASYSHOT_DEMO_DIR")
 
 	listMonitors = func(context.Context) ([]sway.Monitor, error) {
 		return []sway.Monitor{
@@ -47,10 +71,15 @@ func init() {
 	}
 
 	demoSettings = func(s *Settings) bool {
-		*s = Settings{Source: SourceMonitor, Monitor: "DP-1", Desktop: true, Mic: true, Countdown: 3}
+		*s = DefaultSettings()
+		s.Monitor, s.Mic, s.Countdown = "DP-1", true, 3
+		s.MicDevice = "studio-microphone"
 		switch page {
 		case SourceWindow, SourceRegion:
 			s.Source = page
+		case SourceMonitor:
+			s.Camera, s.CameraDevice = true, "/dev/video0"
+			s.CameraPosition, s.CameraSize = "bottom-right", "medium"
 		}
 		return true
 	}
