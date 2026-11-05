@@ -25,7 +25,7 @@ OUT = ROOT / ".github" / "screenshots"
 APP_CLASS = "com.chmouel.Tequilashot.Recorder"
 CLIP = "recording-20261105-13h04.mp4"
 WINDOW_RADIUS = 14
-PAGES = ("monitor", "window", "result", "screenshot", "screenshot-result")
+PAGES = ("monitor", "camera-circle", "window", "result", "screenshot", "screenshot-result")
 
 
 def font(size, weight="Bold"):

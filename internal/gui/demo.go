@@ -80,6 +80,10 @@ func init() {
 		case SourceMonitor:
 			s.Camera, s.CameraDevice = true, "/dev/video0"
 			s.CameraPosition, s.CameraSize = "bottom-right", "medium"
+		case "camera-circle":
+			s.Desktop = true
+			s.Camera, s.CameraDevice = true, "/dev/video0"
+			s.CameraPosition, s.CameraSize, s.CameraShape = "bottom-left", "large", external.CameraCircle
 		}
 		return true
 	}
