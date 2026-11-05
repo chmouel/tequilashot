@@ -146,7 +146,7 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	delay := 0
 	useCurrentScreen := false
 	cropTop := 0
-	audio := false
+	var audio external.AudioSources
 
 	if req.Options != nil {
 		if d, ok := req.Options["delay"].(float64); ok {
@@ -159,7 +159,10 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 			cropTop = int(ct)
 		}
 		if a, ok := req.Options["audio"].(bool); ok {
-			audio = a
+			audio.Desktop = a
+		}
+		if m, ok := req.Options["mic"].(bool); ok {
+			audio.Mic = m
 		}
 	}
 

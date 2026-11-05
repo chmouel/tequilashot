@@ -129,7 +129,7 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Priority: countdown > wf-recorder > OBS
+	// Priority: countdown > screen recorder > OBS
 	if s.countdownRemaining > 0 {
 		return &protocol.WaybarStatus{
 			Text:    fmt.Sprintf("%s %d", s.icons.Countdown, s.countdownRemaining),

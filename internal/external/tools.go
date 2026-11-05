@@ -72,23 +72,57 @@ func WlPaste(ctx context.Context, mimeType string) ([]byte, error) {
 	return cmd.Output()
 }
 
-// StartWfRecorder starts video recording
-func StartWfRecorder(ctx context.Context, geometry, output, filename string, audio bool) (*exec.Cmd, error) {
-	args := []string{}
+// maxRecordingWidth caps the video width; taller content keeps its height
+// ratio. Smaller sources are left alone because -s would upscale them.
+const maxRecordingWidth = 1920
 
-	if geometry != "" {
-		args = append(args, "-g", geometry)
+// AudioSources selects which audio devices a recording captures.
+type AudioSources struct {
+	Desktop bool
+	Mic     bool
+}
+
+// gsrSource returns the gpu-screen-recorder -a value, mixing both devices into one track.
+func (a AudioSources) gsrSource() string {
+	var sources []string
+	if a.Desktop {
+		sources = append(sources, "default_output")
 	}
-	if output != "" {
-		args = append(args, "-o", output)
+	if a.Mic {
+		sources = append(sources, "default_input")
 	}
-	if audio {
-		args = append(args, "-a")
+	return strings.Join(sources, "|")
+}
+
+// StartGpuScreenRecorder starts recording an output or a slurp-style
+// "X,Y WxH" geometry straight to an MP4 file.
+func StartGpuScreenRecorder(ctx context.Context, geometry, output, filename string, audio AudioSources) (*exec.Cmd, error) {
+	args := []string{"-f", "60", "-c", "mp4", "-o", filename}
+
+	var w, h int
+	switch {
+	case geometry != "":
+		var x, y int
+		if _, err := fmt.Sscanf(geometry, "%d,%d %dx%d", &x, &y, &w, &h); err != nil {
+			return nil, fmt.Errorf("invalid geometry %q: %w", geometry, err)
+		}
+		args = append(args, "-w", "region", "-region", fmt.Sprintf("%dx%d+%d+%d", w, h, x, y))
+	case output != "":
+		args = append(args, "-w", output)
+		w, h = gsrOutputSize(ctx, output)
+	default:
+		return nil, fmt.Errorf("no geometry or output to record")
 	}
 
-	args = append(args, "-f", filename)
+	if w > maxRecordingWidth {
+		args = append(args, "-s", fmt.Sprintf("%dx%d", maxRecordingWidth, h))
+	}
 
-	cmd := exec.CommandContext(ctx, "wf-recorder", args...) //nolint:gosec
+	if src := audio.gsrSource(); src != "" {
+		args = append(args, "-a", src)
+	}
+
+	cmd := exec.CommandContext(ctx, "gpu-screen-recorder", args...) //nolint:gosec
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -97,6 +131,25 @@ func StartWfRecorder(ctx context.Context, geometry, output, filename string, aud
 	}
 
 	return cmd, nil
+}
+
+// gsrOutputSize returns the size gpu-screen-recorder reports for a monitor, or zeros if unknown.
+func gsrOutputSize(ctx context.Context, output string) (int, int) {
+	out, err := exec.CommandContext(ctx, "gpu-screen-recorder", "--list-capture-options").Output() //nolint:gosec
+	if err != nil {
+		return 0, 0
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		name, size, ok := strings.Cut(line, "|")
+		if !ok || name != output {
+			continue
+		}
+		var w, h int
+		if _, err := fmt.Sscanf(size, "%dx%d", &w, &h); err == nil {
+			return w, h
+		}
+	}
+	return 0, 0
 }
 
 // Satty opens the satty image editor
@@ -148,25 +201,6 @@ func AIChat(ctx context.Context, model, imagePath, prompt string) (string, error
 	}
 
 	return strings.TrimSpace(string(output)), nil
-}
-
-// Ffmpeg converts video files
-func Ffmpeg(ctx context.Context, inputFile, outputFile string) error {
-	args := []string{
-		"-i", fmt.Sprintf("file:%s", inputFile),
-		"-vf", "scale='min(1920,iw)':-2",
-		"-c:v", "libx264",
-		"-preset", "veryfast",
-		"-crf", "23",
-		"-pix_fmt", "yuv420p",
-		"-movflags", "+faststart",
-		outputFile,
-	}
-
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...) //nolint:gosec
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 // FfmpegRemux remuxes a video file into MP4 using stream copy (no re-encode).
@@ -228,7 +262,8 @@ func Nautilus(ctx context.Context, fileURI string) error {
 func CleanupOldFiles(ctx context.Context, directory string, olderThan time.Duration) error {
 	beforeTime := fmt.Sprintf("%dd", int(olderThan.Hours()/24))
 
-	cmd := exec.CommandContext(ctx, "fd", //nolint:gosec
+	cmd := exec.CommandContext(
+		ctx, "fd", //nolint:gosec
 		"-t", "f",
 		"--full-path", directory,
 		"--changed-before", beforeTime,

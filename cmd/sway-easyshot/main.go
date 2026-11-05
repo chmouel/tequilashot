@@ -174,7 +174,12 @@ func movieSelectionCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name:    "audio",
 				Aliases: []string{"A"},
-				Usage:   "Record audio from default input device",
+				Usage:   "Record desktop audio (default output device)",
+			},
+			&cli.BoolFlag{
+				Name:    "mic",
+				Aliases: []string{"m"},
+				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -193,6 +198,7 @@ func movieSelectionCommand() *cli.Command {
 				Options: map[string]interface{}{
 					"delay": c.Int("delay"),
 					"audio": c.Bool("audio"),
+					"mic":   c.Bool("mic"),
 				},
 			}
 
@@ -226,7 +232,12 @@ func movieScreenCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name:    "audio",
 				Aliases: []string{"A"},
-				Usage:   "Record audio from default input device",
+				Usage:   "Record desktop audio (default output device)",
+			},
+			&cli.BoolFlag{
+				Name:    "mic",
+				Aliases: []string{"m"},
+				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -247,6 +258,7 @@ func movieScreenCommand() *cli.Command {
 					"use_current_screen": c.Bool("current-screen"),
 					"crop_top":           c.Int("crop-top"),
 					"audio":              c.Bool("audio"),
+					"mic":                c.Bool("mic"),
 				},
 			}
 
@@ -269,7 +281,12 @@ func movieCurrentWindowCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name:    "audio",
 				Aliases: []string{"A"},
-				Usage:   "Record audio from default input device",
+				Usage:   "Record desktop audio (default output device)",
+			},
+			&cli.BoolFlag{
+				Name:    "mic",
+				Aliases: []string{"m"},
+				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -288,6 +305,7 @@ func movieCurrentWindowCommand() *cli.Command {
 				Options: map[string]interface{}{
 					"delay": c.Int("delay"),
 					"audio": c.Bool("audio"),
+					"mic":   c.Bool("mic"),
 				},
 			}
 
@@ -297,7 +315,7 @@ func movieCurrentWindowCommand() *cli.Command {
 }
 
 func stopRecordingCommand() *cli.Command {
-	return createSimpleCommand("stop-recording", "Stop wf-recorder and convert to mp4")
+	return createSimpleCommand("stop-recording", "Stop the current recording and save it as MP4")
 }
 
 func pauseRecordingCommand() *cli.Command {
@@ -335,7 +353,12 @@ func toggleRecordCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name:    "audio",
 				Aliases: []string{"A"},
-				Usage:   "Record audio from default input device",
+				Usage:   "Record desktop audio (default output device)",
+			},
+			&cli.BoolFlag{
+				Name:    "mic",
+				Aliases: []string{"m"},
+				Usage:   "Record the microphone (default input device), mixed with --audio when both are set",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -357,6 +380,7 @@ func toggleRecordCommand() *cli.Command {
 					"use_current_screen": c.Bool("current-screen"),
 					"crop_top":           c.Int("crop-top"),
 					"audio":              c.Bool("audio"),
+					"mic":                c.Bool("mic"),
 				},
 			}
 

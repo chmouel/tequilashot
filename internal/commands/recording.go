@@ -32,7 +32,7 @@ func NewRecordingHandler(cfg *config.Config, st *state.State) *RecordingHandler 
 }
 
 // MovieSelection records a video of a selected region.
-func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, audio bool) error {
+func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, audio external.AudioSources) error {
 	if err := notify.CaptureDelay(delay, "movie selection", h.cfg.RecordingStartIcon); err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, audio 
 }
 
 // MovieScreen records a video of the screen (or current screen if useCurrentScreen is true).
-func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurrentScreen bool, cropTop int, audio bool) error {
+func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurrentScreen bool, cropTop int, audio external.AudioSources) error {
 	output, err := sway.SelectOutput(ctx, useCurrentScreen)
 	if err != nil || output == "" {
 		return fmt.Errorf("failed to select output: %w", err)
@@ -77,7 +77,7 @@ func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurren
 }
 
 // MovieCurrentWindow records a video of the currently focused window.
-func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, audio bool) error {
+func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, audio external.AudioSources) error {
 	if err := notify.CaptureDelay(delay, "movie current window", h.cfg.RecordingStartIcon); err != nil {
 		return err
 	}
@@ -92,23 +92,18 @@ func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, au
 	return h.startRecording(ctx, geom, "", audio)
 }
 
-func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, audio bool) error {
+func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, audio external.AudioSources) error {
 	base := h.cfg.GenerateRecordingBase()
-	file := base + ".avi"
-
-	// Check if file exists, add PID suffix if needed
 	if _, err := os.Stat(base + ".mp4"); err == nil {
-		file = fmt.Sprintf("%s-%d.avi", base, os.Getpid())
 		base = fmt.Sprintf("%s-%d", base, os.Getpid())
 	}
+	file := base + ".mp4"
 
-	// Save base filename to cache
 	if err := os.WriteFile(h.cfg.CacheFile, []byte(base), 0o600); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
-	// Start wf-recorder
-	cmd, err := external.StartWfRecorder(ctx, geometry, output, file, audio)
+	cmd, err := external.StartGpuScreenRecorder(ctx, geometry, output, file, audio)
 	if err != nil {
 		return fmt.Errorf("failed to start recording: %w", err)
 	}
@@ -125,40 +120,40 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	return nil
 }
 
-// StopRecording stops the current recording and converts it to MP4.
+// StopRecording stops the current recording and waits for the MP4 to be finalised.
 func (h *RecordingHandler) StopRecording(ctx context.Context) error {
-	// Kill wf-recorder
-	_ = exec.Command("killall", "-s", "SIGINT", "wf-recorder").Run() //nolint:gosec
+	pid := h.state.GetRecordingPID()
+	if pid == 0 {
+		// The daemon may have restarted since the recording began.
+		out, err := exec.CommandContext(ctx, "pgrep", "-n", "-f", "^gpu-screen-recorder ").Output() //nolint:gosec
+		if err != nil {
+			return fmt.Errorf("no recording in progress")
+		}
+		if _, err := fmt.Sscanf(string(out), "%d", &pid); err != nil {
+			return fmt.Errorf("failed to parse recorder PID: %w", err)
+		}
+	}
 
-	// Wait a bit for process to terminate
-	time.Sleep(500 * time.Millisecond)
+	if err := syscall.Kill(pid, syscall.SIGINT); err != nil {
+		return fmt.Errorf("failed to stop recording: %w", err)
+	}
+	_ = notify.Send(2000, h.cfg.ScreenshotIcon, "Recording finished, saving")
 
-	// Read cache file for base name
+	if err := waitForExit(pid, 30*time.Second); err != nil {
+		return err
+	}
+
 	data, err := os.ReadFile(h.cfg.CacheFile)
 	if err != nil {
 		return fmt.Errorf("failed to read cache file: %w", err)
 	}
-
-	base := string(data)
-	aviFile := base + ".avi"
-
-	// Check if .avi file exists
-	if _, err := os.Stat(aviFile); os.IsNotExist(err) { //nolint:gosec
-		_ = notify.Send(5000, h.cfg.ScreenshotIcon, fmt.Sprintf("Could not find %s", aviFile))
-		return fmt.Errorf("recording file not found: %s", aviFile)
-	}
-
-	_ = notify.Send(3000, h.cfg.ScreenshotIcon, "Recording finished, converting")
-
-	// Convert to mp4
-	mp4File := base + ".mp4"
-	if err := external.Ffmpeg(ctx, aviFile, mp4File); err != nil {
-		return fmt.Errorf("failed to convert video: %w", err)
-	}
-
-	// Clean up
-	_ = os.Remove(aviFile) //nolint:gosec
+	mp4File := string(data) + ".mp4"
 	_ = os.Remove(h.cfg.CacheFile)
+
+	if _, err := os.Stat(mp4File); err != nil {
+		_ = notify.Send(5000, h.cfg.ScreenshotIcon, fmt.Sprintf("Could not find %s", mp4File))
+		return fmt.Errorf("recording file not found: %s", mp4File)
+	}
 
 	// Update state
 	h.state.SetRecording(false, "", 0)
@@ -214,8 +209,7 @@ func (h *RecordingHandler) PauseRecording(ctx context.Context) error {
 		return fmt.Errorf("failed to find recording process: %w", err)
 	}
 
-	// Send SIGUSR1 to pause/resume wf-recorder
-	if err := process.Signal(syscall.SIGUSR1); err != nil {
+	if err := process.Signal(syscall.SIGUSR2); err != nil {
 		return fmt.Errorf("failed to pause recording: %w", err)
 	}
 
@@ -234,7 +228,7 @@ func (h *RecordingHandler) PauseRecording(ctx context.Context) error {
 }
 
 // ToggleRecord toggles recording state: starts if not recording, stops if recording.
-func (h *RecordingHandler) ToggleRecord(ctx context.Context, startAction string, delay int, useCurrentScreen bool, cropTop int, audio bool) error {
+func (h *RecordingHandler) ToggleRecord(ctx context.Context, startAction string, delay int, useCurrentScreen bool, cropTop int, audio external.AudioSources) error {
 	// Check current state
 	currentState := h.state.GetState()
 
@@ -257,4 +251,16 @@ func (h *RecordingHandler) ToggleRecord(ctx context.Context, startAction string,
 	default:
 		return fmt.Errorf("invalid start action: %s (valid: movie-selection, movie-screen, movie-current-window)", startAction)
 	}
+}
+
+// waitForExit polls until pid is gone, giving the recorder time to finalise the file.
+func waitForExit(pid int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); err != nil {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("recorder (pid %d) did not exit within %s", pid, timeout)
 }

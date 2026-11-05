@@ -5,7 +5,7 @@ A screenshot and screen recording utility for Sway/Wayland.
 ## Features
 
 - Screenshot capture (window, screen, or selection)
-- Screen recording with wf-recorder
+- Screen recording with gpu-screen-recorder (hardware-accelerated, saved directly as MP4)
 - Clipboard integration
 - Image editing with satty
 - Waybar status integration
@@ -18,9 +18,9 @@ A screenshot and screen recording utility for Sway/Wayland.
 
 - [grim](https://sr.ht/~emersion/grim/) - screenshot capture
 - [slurp](https://github.com/emersion/slurp) - region selection
-- [wf-recorder](https://github.com/ammen99/wf-recorder) - screen recording
+- [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) - screen recording
 - [wl-clipboard](https://github.com/bugaevc/wl-clipboard) - clipboard (wl-copy/wl-paste)
-- [ffmpeg](https://ffmpeg.org/) - video conversion
+- [ffmpeg](https://ffmpeg.org/) - remuxing OBS recordings to MP4
 
 **Optional:**
 
@@ -67,6 +67,9 @@ sway-easyshot movie-screen
 sway-easyshot movie-screen --crop-top 75        # skip top 75px (e.g. status bar)
 sway-easyshot movie-screen --current-screen --crop-top 75
 sway-easyshot movie-current-window
+sway-easyshot movie-screen --audio              # with desktop sound
+sway-easyshot movie-screen --mic                # with the microphone
+sway-easyshot movie-screen --audio --mic        # both, mixed into one track
 sway-easyshot stop-recording
 sway-easyshot pause-recording
 sway-easyshot toggle-record
