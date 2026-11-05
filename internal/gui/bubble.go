@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,7 +44,7 @@ window.easyshot-bubble, window.easyshot-bubble.background { background: transpar
 .easyshot-bubble-disc picture.mirrored { transform: scale(-1, 1); }
 `
 
-// RunCameraBubble shows the camera as a click-through circle until it is sent
+// RunCameraBubble shows the camera as a draggable circle until it is sent
 // SIGTERM or SIGINT. It prints "ready" on stdout once the first picture is on
 // screen, and fails if the camera cannot be opened.
 func RunCameraBubble(opts BubbleOptions) error {
@@ -165,26 +166,71 @@ func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Pi
 	pic.SetVExpand(true)
 	disc.Append(pic)
 
+	// The window covers the whole monitor and the disc moves within it, so a
+	// drag never waits on the compositor to move the surface.
+	monitor, left, top := monitorAt(display, opts.X, opts.Y, opts.Diameter)
+	fixed := gtk.NewFixed()
+	fixed.Put(disc, float64(left), float64(top))
+
 	win := gtk.NewWindow()
 	win.SetApplication(app)
 	win.AddCSSClass("easyshot-bubble")
 	win.SetDecorated(false)
-	win.SetResizable(false)
-	win.SetDefaultSize(opts.Diameter, opts.Diameter)
-	win.SetChild(disc)
-
-	monitor, left, top := monitorAt(display, opts.X, opts.Y, opts.Diameter)
-	if err := placeLayer(win, monitor, left, top); err != nil {
+	win.SetChild(fixed)
+	if err := placeLayer(win, monitor); err != nil {
 		return nil, nil, err
 	}
 
-	// Let clicks pass through to whatever lies beneath.
-	win.ConnectRealize(func() {
-		if region, err := cairo.RegionCreate(); err == nil {
-			gdk.BaseSurface(win.Surface()).SetInputRegion(region)
+	// Only the disc takes the pointer; clicks elsewhere reach what lies beneath.
+	setInput := func() {
+		if surface := win.Surface(); surface != nil {
+			if region, err := circleRegion(left, top, opts.Diameter); err == nil {
+				gdk.BaseSurface(surface).SetInputRegion(region)
+			}
 		}
+	}
+	win.ConnectRealize(setInput)
+
+	disc.SetCursorFromName("grab")
+	drag := gtk.NewGestureDrag()
+	startX, startY := left, top
+	drag.ConnectDragBegin(func(_, _ float64) {
+		startX, startY = left, top
+		disc.SetCursorFromName("grabbing")
 	})
+	drag.ConnectDragUpdate(func(dx, dy float64) {
+		left = clampInt(startX+int(dx), 0, fixed.Width()-opts.Diameter)
+		top = clampInt(startY+int(dy), 0, fixed.Height()-opts.Diameter)
+		fixed.Move(disc, float64(left), float64(top))
+	})
+	drag.ConnectDragEnd(func(_, _ float64) {
+		disc.SetCursorFromName("grab")
+		setInput()
+	})
+	disc.AddController(drag)
 	return win, pic, nil
+}
+
+// circleRegion approximates a disc of diameter d at x, y with one-pixel strips.
+func circleRegion(x, y, d int) (*cairo.Region, error) {
+	r := float64(d) / 2
+	strips := make([]*cairo.Rectangle, 0, d)
+	for row := range d {
+		dy := float64(row) + 0.5 - r
+		half := int(math.Round(math.Sqrt(max(0, r*r-dy*dy))))
+		if half > 0 {
+			strips = append(strips, cairo.RectangleNew(x+int(r)-half, y+row, 2*half, 1))
+		}
+	}
+	if len(strips) == 0 {
+		return cairo.RegionCreate()
+	}
+	var region *cairo.Region
+	return region.CreateRectangles(strips...)
+}
+
+func clampInt(v, lo, hi int) int {
+	return max(lo, min(v, hi))
 }
 
 // monitorAt returns the monitor containing the centre of the bubble and the
