@@ -67,6 +67,8 @@ Install the runtime tools listed below for the features you use.
 | [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Clipboard commands |
 | [FFmpeg](https://ffmpeg.org/) | Processing recordings and video previews |
 
+### Optional
+
 [Satty](https://github.com/gabm/satty) opens screenshots for editing.
 [aichat](https://github.com/sigoden/aichat) can provide AI-generated filenames. A file manager and `fd` are used
 for optional reveal and cleanup actions.
@@ -152,18 +154,5 @@ bindsym $ctrl+Print exec tequilashot toggle-record -a movie-current-window -w 2
 bindsym $ctrl+Shift+Print exec tequilashot stop-recording
 ```
 
-## Development
-
-```sh
-make build
-make test
-```
-
-`make screenshots` regenerates the dialogue and social-preview images. It
-requires a Hyprland session, `grim`, FFmpeg, Pillow, Inter Display and the GTK
-development files. The demo build stages sample windows and media; it does not
-capture desktop content.
-
-## Licence
 
 Apache 2.0. See [LICENSE](LICENSE).
