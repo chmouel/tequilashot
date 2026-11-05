@@ -188,6 +188,56 @@ Recording flags:
   `--camera-shape circle` for the [round camera](#round-camera).
 - `--crop-top <px>` (screen recordings only): trim pixels from the top.
 
+### Hyprland key bindings
+
+With a Lua configuration (`~/.config/hypr/hyprland.lua`), bind the commands
+with `hl.bind` and `hl.dsp.exec_cmd`:
+
+```lua
+-- Open the capture dialogue
+hl.bind("SUPER + R", hl.dsp.exec_cmd("tequilashot"))
+-- Region screenshot to the clipboard
+hl.bind("Print", hl.dsp.exec_cmd("tequilashot selection-clipboard"))
+-- Region screenshot to a file
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd("tequilashot selection-file"))
+-- Start or stop a screen recording
+hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("tequilashot toggle-record -a movie-screen -w 2"))
+-- Start or stop a window recording
+hl.bind("SUPER + CTRL + R", hl.dsp.exec_cmd("tequilashot toggle-record -a movie-current-window -w 2"))
+-- Pause or resume the recording
+hl.bind("SUPER + P", hl.dsp.exec_cmd("tequilashot pause-recording"))
+-- Stop the recording
+hl.bind("SUPER + S", hl.dsp.exec_cmd("tequilashot stop-recording"))
+```
+
+`pause-recording` toggles between pausing and resuming. The dialogue has no
+pause button, so use this binding or the command line. Adjust the keys to suit
+your setup; Hyprland reloads a Lua configuration when the file is saved, or
+run `hyprctl reload`.
+
+### Sway key bindings
+
+Add bindings like these to `~/.config/sway/config`:
+
+```
+# Open the capture dialogue
+bindsym $mod+r exec tequilashot
+# Region screenshot to the clipboard
+bindsym Print exec tequilashot selection-clipboard
+# Region screenshot to a file
+bindsym Shift+Print exec tequilashot selection-file
+# Start or stop a screen recording
+bindsym $mod+Shift+r exec tequilashot toggle-record -a movie-screen -w 2
+# Start or stop a window recording
+bindsym $mod+Ctrl+r exec tequilashot toggle-record -a movie-current-window -w 2
+# Pause or resume the recording
+bindsym $mod+p exec tequilashot pause-recording
+# Stop the recording
+bindsym $mod+s exec tequilashot stop-recording
+```
+
+Adjust the keys to suit your setup, then reload with `swaymsg reload`.
+
 ## Virtual camera
 
 `tequilashot virtual-camera` publishes a camera device that Chrome, Google Meet
