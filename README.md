@@ -2,7 +2,7 @@
 
 A screenshot and screen recording utility for Sway/Wayland.
 
-![The record-gui dialogue: choosing a monitor, choosing a window, and the result card after a recording](.github/screenshots/record-gui.png)
+![The recording dialogue: choosing a monitor, choosing a window, and the result card after a recording](.github/screenshots/dialogue.png)
 
 ## Features
 
@@ -24,7 +24,7 @@ A screenshot and screen recording utility for Sway/Wayland.
 - [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) - screen recording
 - [wl-clipboard](https://github.com/bugaevc/wl-clipboard) - clipboard (wl-copy/wl-paste)
 - [ffmpeg](https://ffmpeg.org/) - remuxing OBS recordings to MP4
-- [GTK 4](https://www.gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - runtime libraries for the `record-gui` dialogue (building from source requires their development headers and cgo)
+- [GTK 4](https://www.gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - runtime libraries for the recording dialogue (building from source requires their development headers and cgo)
 
 **Optional:**
 
@@ -57,8 +57,8 @@ Or build directly:
 make build
 ```
 
-Prebuilt release binaries are static and do not include the `record-gui`
-dialogue; the command there reports that it was built without GUI support.
+Prebuilt release binaries are static and do not include the recording
+dialogue; running `sway-easyshot` without a command there reports that it was built without GUI support.
 Building from source with the GTK 4 and libadwaita development files installed
 includes it. To build a static binary without the dialogue, use
 `CGO_ENABLED=0 go build -tags nogui ./cmd/sway-easyshot`.
@@ -92,8 +92,8 @@ sway-easyshot pause-recording
 sway-easyshot toggle-record
 sway-easyshot toggle-record -a movie-screen --crop-top 75
 
-# Recording dialogue (GTK4/libadwaita)
-sway-easyshot record-gui
+# Recording dialogue (GTK4/libadwaita), the default without a command
+sway-easyshot
 
 # Waybar integration
 sway-easyshot waybar-status
@@ -135,7 +135,7 @@ selection and countdown to finish.
 
 ## Recording Dialogue
 
-`sway-easyshot record-gui` opens a small libadwaita window in which to choose
+Running `sway-easyshot` without a command opens a small libadwaita window in which to choose
 the source (a monitor with a live thumbnail, an open window, or a region), the
 audio sources (desktop sound, microphone; when the microphone is on, a
 Microphone selector offers the system default or any detected input), an optional webcam overlay and a
@@ -147,7 +147,7 @@ nearest corner, and choose the device, the size (small, medium or large) and
 whether to mirror the image. The preview uses the camera only whilst the window
 is showing the setup page, and releases it before recording begins. Escape
 closes the window and Enter starts recording. The choices are
-remembered in `$XDG_CONFIG_HOME/sway-easyshot/record-gui.json`
+remembered in `$XDG_CONFIG_HOME/sway-easyshot/sway-easyshot.json`
 (`~/.config` when unset).
 
 The window hides whilst recording and returns, showing a result card, once the
@@ -156,7 +156,7 @@ with buttons to play it, reveal it in the file manager, copy its path, rename it
 or move it to the bin. "New recording" (or Escape) returns to the setup page.
 Previews and details rely on `ffmpeg` and `ffprobe`.
 
-Running `record-gui` whilst a recording is in progress stops it and shows the
+Running `sway-easyshot` without a command whilst a recording is in progress stops it and shows the
 window again, so a single key binding suffices. If the key is pressed whilst the recording is still being set up (countdown or region
 selection), the stop is held and applied as soon as recording begins. Monitor
 thumbnails refresh every two seconds whilst the window is visible.

@@ -45,7 +45,7 @@ func DefaultSettings() Settings {
 	}
 }
 
-// settingsPath locates record-gui.json under the user's configuration directory.
+// settingsPath locates sway-easyshot.json under the user's configuration directory.
 func settingsPath() (string, error) {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
@@ -55,7 +55,7 @@ func settingsPath() (string, error) {
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "sway-easyshot", "record-gui.json"), nil
+	return filepath.Join(dir, "sway-easyshot", "sway-easyshot.json"), nil
 }
 
 // LoadSettings reads settings from path, falling back to defaults for a

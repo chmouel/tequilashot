@@ -24,7 +24,13 @@ import (
 func main() {
 	cmd := &cli.Command{
 		Name:  "sway-easyshot",
-		Usage: "Recording and screenshot utility for sway",
+		Usage: "Recording and screenshot utility for sway; without a command, opens the recording dialogue",
+		Action: func(ctx context.Context, c *cli.Command) error {
+			if c.Args().Present() {
+				return fmt.Errorf("unknown command %q", c.Args().First())
+			}
+			return guiAction(ctx, c)
+		},
 		Commands: []*cli.Command{
 			daemonCommand(),
 			waybarStatusCommand(),
@@ -42,7 +48,6 @@ func main() {
 			stopRecordingCommand(),
 			pauseRecordingCommand(),
 			toggleRecordCommand(),
-			recordGUICommand(),
 		},
 	}
 

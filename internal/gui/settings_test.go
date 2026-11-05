@@ -9,9 +9,11 @@ import (
 )
 
 func TestSettingsRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sub", "record-gui.json")
-	want := Settings{Source: SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,
-		Camera: true, CameraDevice: "/dev/video2", CameraPosition: "top-left", CameraSize: "large", CameraMirror: true}
+	path := filepath.Join(t.TempDir(), "sub", "sway-easyshot.json")
+	want := Settings{
+		Source: SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,
+		Camera: true, CameraDevice: "/dev/video2", CameraPosition: "top-left", CameraSize: "large", CameraMirror: true,
+	}
 	if err := SaveSettings(path, want); err != nil {
 		t.Fatal(err)
 	}

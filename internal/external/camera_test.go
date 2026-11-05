@@ -17,8 +17,11 @@ func TestCameraGsrSource(t *testing.T) {
 		{"top-left small", CameraOverlay{Device: "/dev/video0", Position: CameraTopLeft, Size: CameraSmall}, "/dev/video0;width=15%;halign=start;valign=start;x=2%;y=3%"},
 		{"top-right large", CameraOverlay{Device: "/dev/video0", Position: CameraTopRight, Size: CameraLarge}, "/dev/video0;width=35%;halign=end;valign=start;x=-2%;y=3%"},
 		{"bottom-left medium", CameraOverlay{Device: "/dev/video2", Position: CameraBottomLeft, Size: CameraMedium}, "/dev/video2;width=25%;halign=start;valign=end;x=2%;y=-3%"},
-		{"bottom-right mirror mode", CameraOverlay{Device: "/dev/video0", Position: CameraBottomRight, Mirror: true, Width: 1280, Height: 720, FPS: 30},
-			"/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%;hflip=true;camera_width=1280;camera_height=720;camera_fps=30"},
+		{
+			"bottom-right mirror mode",
+			CameraOverlay{Device: "/dev/video0", Position: CameraBottomRight, Mirror: true, Width: 1280, Height: 720, FPS: 30},
+			"/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%;hflip=true;camera_width=1280;camera_height=720;camera_fps=30",
+		},
 		{"mode without fps", CameraOverlay{Device: "/dev/video0", Width: 640, Height: 480}, "/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%;camera_width=640;camera_height=480"},
 	}
 	for _, tt := range tests {

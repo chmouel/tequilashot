@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the README and social-preview images for record-gui.
+"""Render the README and social-preview images for the recording dialogue.
 
 Runs the `demo` build of sway-easyshot (staged monitors, windows and a
 recording, so no real desktop content is captured), grabs each page on a
@@ -219,7 +219,7 @@ def capture(binary, tmp, page):
     # Pin the dark style so the images do not depend on the desktop colour scheme.
     env = dict(os.environ, SWAY_EASYSHOT_DEMO=page, SWAY_EASYSHOT_DEMO_DIR=str(tmp),
                ADW_DEBUG_COLOR_SCHEME="prefer-dark")
-    proc = subprocess.Popen([binary, "record-gui"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen([binary], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         win = None
         for _ in range(50):
@@ -228,7 +228,7 @@ def capture(binary, tmp, page):
             if win:
                 break
         if not win:
-            sys.exit(f"record-gui window for {page!r} never appeared")
+            sys.exit(f"recording dialogue window for {page!r} never appeared")
         time.sleep(2.5)  # thumbnails, staged selection and preview frame
         win = hypr_window()
         if not visible_and_on_top(win):
@@ -358,8 +358,8 @@ def main():
         stage_assets(tmp)
         shots = {p: capture(binary, tmp, p) for p in ("monitor", "window", "result")}
         for page, img in shots.items():
-            rounded(img).save(OUT / f"record-gui-{page}.png")
-        hero(shots).save(OUT / "record-gui.png", optimize=True)
+            rounded(img).save(OUT / f"dialogue-{page}.png")
+        hero(shots).save(OUT / "dialogue.png", optimize=True)
         social(shots).save(OUT / "social-preview.png", optimize=True)
     print(f"wrote images to {OUT.relative_to(ROOT)}")
 

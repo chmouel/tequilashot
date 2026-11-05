@@ -167,7 +167,7 @@ func Run(b Backend) error {
 		log.Print("camera preview did not exit in time")
 	}
 	if code != 0 {
-		return fmt.Errorf("record-gui exited with status %d", code)
+		return fmt.Errorf("recording dialogue exited with status %d", code)
 	}
 	return nil
 }
