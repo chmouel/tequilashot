@@ -128,7 +128,7 @@ func resolveMic(ctx context.Context, opts RecordOptions) (RecordOptions, error) 
 			return opts, nil
 		}
 	}
-	return opts, fmt.Errorf("Microphone %s is not available", id)
+	return opts, fmt.Errorf("microphone %s is not available", id)
 }
 
 // resolveOptions validates the camera and microphone requests.
@@ -313,7 +313,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 		return h.earlyFailure(sess, file, err, stderr)
 	case <-timer.C:
 	case <-ctx.Done():
-		<-exited
+		<-exited //nolint:errcheck // the exit status is moot once the context is cancelled
 		if !sess.stopping.Load() {
 			h.releaseSession(sess, false)
 			if info, statErr := os.Stat(file); statErr == nil && info.Size() == 0 {

@@ -204,7 +204,7 @@ func TestResolveMic(t *testing.T) {
 	if err != nil || opts.Audio.MicDevice != "" {
 		t.Errorf("device without mic must be dropped: %+v, %v", opts, err)
 	}
-	if _, err = resolveMic(ctx, RecordOptions{Audio: external.AudioSources{Mic: true, MicDevice: "gone"}}); err == nil || !strings.Contains(err.Error(), "Microphone gone is not available") {
+	if _, err = resolveMic(ctx, RecordOptions{Audio: external.AudioSources{Mic: true, MicDevice: "gone"}}); err == nil || !strings.Contains(err.Error(), "microphone gone is not available") {
 		t.Errorf("missing device: %v", err)
 	}
 	if _, err = resolveMic(ctx, RecordOptions{Audio: external.AudioSources{Mic: true, MicDevice: "a|b"}}); err == nil {

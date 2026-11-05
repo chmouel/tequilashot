@@ -19,7 +19,7 @@ func CameraNameIn(root, device string) string {
 	if !ValidCameraDevice(device) {
 		return device
 	}
-	data, err := os.ReadFile(filepath.Join(root, filepath.Base(device), "name"))
+	data, err := os.ReadFile(filepath.Join(root, filepath.Base(device), "name")) //nolint:gosec // device is validated above
 	if err != nil {
 		return device
 	}

@@ -7,22 +7,24 @@ import (
 	"testing"
 )
 
+const testCameraDevice = "/dev/video0"
+
 func TestCameraGsrSource(t *testing.T) {
 	tests := []struct {
 		name string
 		c    CameraOverlay
 		want string
 	}{
-		{"default", CameraOverlay{Device: "/dev/video0"}, "/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%"},
-		{"top-left small", CameraOverlay{Device: "/dev/video0", Position: CameraTopLeft, Size: CameraSmall}, "/dev/video0;width=15%;halign=start;valign=start;x=2%;y=3%"},
-		{"top-right large", CameraOverlay{Device: "/dev/video0", Position: CameraTopRight, Size: CameraLarge}, "/dev/video0;width=35%;halign=end;valign=start;x=-2%;y=3%"},
+		{"default", CameraOverlay{Device: testCameraDevice}, "/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%"},
+		{"top-left small", CameraOverlay{Device: testCameraDevice, Position: CameraTopLeft, Size: CameraSmall}, "/dev/video0;width=15%;halign=start;valign=start;x=2%;y=3%"},
+		{"top-right large", CameraOverlay{Device: testCameraDevice, Position: CameraTopRight, Size: CameraLarge}, "/dev/video0;width=35%;halign=end;valign=start;x=-2%;y=3%"},
 		{"bottom-left medium", CameraOverlay{Device: "/dev/video2", Position: CameraBottomLeft, Size: CameraMedium}, "/dev/video2;width=25%;halign=start;valign=end;x=2%;y=-3%"},
 		{
 			"bottom-right mirror mode",
-			CameraOverlay{Device: "/dev/video0", Position: CameraBottomRight, Mirror: true, Width: 1280, Height: 720, FPS: 30},
+			CameraOverlay{Device: testCameraDevice, Position: CameraBottomRight, Mirror: true, Width: 1280, Height: 720, FPS: 30},
 			"/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%;hflip=true;camera_width=1280;camera_height=720;camera_fps=30",
 		},
-		{"mode without fps", CameraOverlay{Device: "/dev/video0", Width: 640, Height: 480}, "/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%;camera_width=640;camera_height=480"},
+		{"mode without fps", CameraOverlay{Device: testCameraDevice, Width: 640, Height: 480}, "/dev/video0;width=25%;halign=end;valign=end;x=-2%;y=-3%;camera_width=640;camera_height=480"},
 	}
 	for _, tt := range tests {
 		if got := tt.c.gsrSource(); got != tt.want {
@@ -32,7 +34,7 @@ func TestCameraGsrSource(t *testing.T) {
 }
 
 func TestCameraValidate(t *testing.T) {
-	good := CameraOverlay{Device: "/dev/video0", Position: CameraTopLeft, Size: CameraLarge, Width: 1, Height: 1, FPS: 1}
+	good := CameraOverlay{Device: testCameraDevice, Position: CameraTopLeft, Size: CameraLarge, Width: 1, Height: 1, FPS: 1}
 	if err := good.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,10 +48,10 @@ func TestCameraValidate(t *testing.T) {
 		{Device: "/dev/video0\n"},
 		{Device: "/dev/videoX"},
 		{Device: "x/dev/video0"},
-		{Device: "/dev/video0", Position: "middle"},
-		{Device: "/dev/video0", Size: "huge"},
-		{Device: "/dev/video0", Width: -1},
-		{Device: "/dev/video0", FPS: -1},
+		{Device: testCameraDevice, Position: "middle"},
+		{Device: testCameraDevice, Size: "huge"},
+		{Device: testCameraDevice, Width: -1},
+		{Device: testCameraDevice, FPS: -1},
 	}
 	for _, c := range bad {
 		if c.Validate() == nil {
@@ -107,23 +109,23 @@ func TestBestCameraMode(t *testing.T) {
 			t.Errorf("%s: got %dx%d@%d, want %dx%d@%d", device, gw, gh, gf, w, h, fps)
 		}
 	}
-	check("/dev/video0", 1280, 720, 30)
+	check(testCameraDevice, 1280, 720, 30)
 	check("/dev/video3", 800, 600, 15)
 	check("/dev/video9", 0, 0, 0)
 
 	only := ParseCameraModes("/dev/video0|3840x2160@30hz|mjpeg\n/dev/video0|1920x1080@60hz|mjpeg\n/dev/video0|1920x1080@30hz|mjpeg\n")
-	if w, h, f := BestCameraMode(only, "/dev/video0"); w != 1920 || h != 1080 || f != 30 {
+	if w, h, f := BestCameraMode(only, testCameraDevice); w != 1920 || h != 1080 || f != 30 {
 		t.Errorf("fallback got %dx%d@%d", w, h, f)
 	}
 
 	frac := ParseCameraModes("/dev/video0|1280x720@29.97hz|mjpeg\n")
-	if w, h, f := BestCameraMode(frac, "/dev/video0"); w != 1280 || h != 720 || f != 0 {
+	if w, h, f := BestCameraMode(frac, testCameraDevice); w != 1280 || h != 720 || f != 0 {
 		t.Errorf("fractional got %dx%d@%d", w, h, f)
 	}
 }
 
 func TestGsrArgs(t *testing.T) {
-	cam := CameraOverlay{Device: "/dev/video0", Position: CameraTopLeft}
+	cam := CameraOverlay{Device: testCameraDevice, Position: CameraTopLeft}
 	args, err := gsrArgs("10,20 800x600", "", "o.mp4", 0, 0, AudioSources{Desktop: true}, cam)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +155,7 @@ func TestGsrArgs(t *testing.T) {
 func TestCameraNameIn(t *testing.T) {
 	root := t.TempDir()
 	write := func(dir, name string) {
-		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o750); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(root, dir, "name"), []byte(name), 0o644); err != nil {
@@ -164,10 +166,10 @@ func TestCameraNameIn(t *testing.T) {
 	write("video2", "  \n")
 
 	for device, want := range map[string]string{
-		"/dev/video0":  "Integrated Camera",
-		"/dev/video2":  "/dev/video2",
-		"/dev/video9":  "/dev/video9",
-		"/dev/../evil": "/dev/../evil",
+		testCameraDevice: "Integrated Camera",
+		"/dev/video2":    "/dev/video2",
+		"/dev/video9":    "/dev/video9",
+		"/dev/../evil":   "/dev/../evil",
 	} {
 		if got := CameraNameIn(root, device); got != want {
 			t.Errorf("CameraNameIn(%q) = %q, want %q", device, got, want)
@@ -196,26 +198,26 @@ func TestCameraLayout(t *testing.T) {
 
 func TestPreviewMode(t *testing.T) {
 	modes := ParseCameraModes("/dev/video0|1280x720@30hz|mjpeg\n/dev/video0|640x480@30hz|mjpeg\n/dev/video0|640x360@30hz|mjpeg\n/dev/video0|320x240@30hz|mjpeg\n/dev/video1|160x120@30hz|mjpeg\n")
-	if w, h := PreviewMode(modes, "/dev/video0"); w != 640 || h != 360 {
+	if w, h := PreviewMode(modes, testCameraDevice); w != 640 || h != 360 {
 		t.Errorf("same aspect: %dx%d", w, h)
 	}
-	if w, h := PreviewMode(modes[:2], "/dev/video0"); w != 640 || h != 480 {
+	if w, h := PreviewMode(modes[:2], testCameraDevice); w != 640 || h != 480 {
 		t.Errorf("fallback to largest: %dx%d", w, h)
 	}
 	if w, h := PreviewMode(modes, "/dev/video7"); w != 640 || h != 480 {
 		t.Errorf("unknown device: %dx%d", w, h)
 	}
-	if w, h := PreviewMode(ParseCameraModes("/dev/video0|1920x1080@30hz|mjpeg\n"), "/dev/video0"); w != 640 || h != 480 {
+	if w, h := PreviewMode(ParseCameraModes("/dev/video0|1920x1080@30hz|mjpeg\n"), testCameraDevice); w != 640 || h != 480 {
 		t.Errorf("no small mode: %dx%d", w, h)
 	}
 }
 
 func TestPreviewArgs(t *testing.T) {
-	native := strings.Join(PreviewArgs("/dev/video0", 640, 360, true), " ")
+	native := strings.Join(PreviewArgs(testCameraDevice, 640, 360, true), " ")
 	if !strings.Contains(native, "-input_format mjpeg") || !strings.Contains(native, "-c:v copy") || !strings.Contains(native, "-video_size 640x360") || !strings.HasSuffix(native, "-f mjpeg -") {
 		t.Errorf("native: %s", native)
 	}
-	raw := strings.Join(PreviewArgs("/dev/video0", 640, 480, false), " ")
+	raw := strings.Join(PreviewArgs(testCameraDevice, 640, 480, false), " ")
 	if !strings.Contains(raw, "-input_format yuyv422") || !strings.Contains(raw, "-c:v mjpeg -q:v 5") {
 		t.Errorf("raw: %s", raw)
 	}
@@ -237,7 +239,7 @@ func TestContainRect(t *testing.T) {
 }
 
 func TestCameraIndex(t *testing.T) {
-	devs := []string{"/dev/video0", "/dev/video2", "/dev/video4"}
+	devs := []string{testCameraDevice, "/dev/video2", "/dev/video4"}
 	if i := CameraIndex(devs, "/dev/video4"); i != 2 {
 		t.Fatalf("got %d", i)
 	}

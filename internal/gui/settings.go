@@ -67,7 +67,7 @@ func settingsPath() (string, error) {
 // missing or unreadable file and for out-of-range values.
 func LoadSettings(path string) Settings {
 	s := DefaultSettings()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is the user's own settings file
 	if err != nil {
 		return s
 	}

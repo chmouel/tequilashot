@@ -22,7 +22,7 @@ const (
 	CameraLarge  = "large"
 )
 
-var cameraDevicePattern = regexp.MustCompile(`^/dev/video[0-9]+$`)
+var cameraDevicePattern = regexp.MustCompile(`^/dev/video\d+$`)
 
 // ValidCameraDevice reports whether device is a plain /dev/videoN path.
 func ValidCameraDevice(device string) bool {

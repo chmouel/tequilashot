@@ -7,7 +7,7 @@ import (
 
 // jpegOf builds a minimal well-formed JPEG whose APP0 segment carries payload.
 func jpegOf(payload ...byte) []byte {
-	out := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0, byte(len(payload) + 2)}
+	out := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0, byte(len(payload) + 2)} //nolint:gosec // test payloads are tiny
 	out = append(out, payload...)
 	out = append(out, 0xFF, 0xDA, 0, 4, 0, 0, 0x11, 0xFF, 0x00, 0xFF, 0xD0, 0x22)
 	return append(out, 0xFF, 0xD9)

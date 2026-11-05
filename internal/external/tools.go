@@ -275,8 +275,8 @@ func Nautilus(ctx context.Context, fileURI string) error {
 func CleanupOldFiles(ctx context.Context, directory string, olderThan time.Duration) error {
 	beforeTime := fmt.Sprintf("%dd", int(olderThan.Hours()/24))
 
-	cmd := exec.CommandContext(
-		ctx, "fd", //nolint:gosec
+	cmd := exec.CommandContext( //nolint:gosec
+		ctx, "fd",
 		"-t", "f",
 		"--full-path", directory,
 		"--changed-before", beforeTime,

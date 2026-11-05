@@ -128,7 +128,7 @@ func TestRenameTarget(t *testing.T) {
 	for name, want := range map[string]string{
 		"b":     filepath.Join(dir, "b.mp4"),
 		"b.mp4": filepath.Join(dir, "b.mp4"),
-		" c d ": filepath.Join(dir, "c d.mp4"),
+		" c d ": filepath.Join(dir, "c d.mp4"), //nolint:gocritic // surrounding spaces must be trimmed
 		"a":     old,
 	} {
 		got, err := RenameTarget(old, name)

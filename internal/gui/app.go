@@ -176,7 +176,7 @@ func Run(b Backend) error {
 	}
 	a.monName = a.settings.Monitor
 
-	a.gtkApp = adw.NewApplication(appID, gio.ApplicationFlagsNone)
+	a.gtkApp = adw.NewApplication(appID, gio.ApplicationDefaultFlags)
 	a.gtkApp.ConnectActivate(a.activate)
 	code := a.gtkApp.Run([]string{os.Args[0]})
 	a.stopPreview()
@@ -1031,7 +1031,8 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 		time.Sleep(500 * time.Millisecond)
 		st := a.state()
 		if st == nil {
-			if failures++; failures >= 3 {
+			failures++
+			if failures >= 3 {
 				a.finish(nil, errors.New("the daemon could not be reached to confirm the recording"))
 				return
 			}
