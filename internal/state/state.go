@@ -15,6 +15,7 @@ type State struct {
 	paused             bool
 	recordingFile      string
 	recordingPID       int
+	quietFinish        bool
 	recordingStartTime time.Time
 	obsRecording       bool
 	obsPaused          bool
@@ -84,7 +85,22 @@ func (s *State) SetRecording(recording bool, file string, pid int) {
 		s.recordingStartTime = time.Now()
 	} else {
 		s.recordingStartTime = time.Time{}
+		s.quietFinish = false
 	}
+}
+
+// SetQuietFinish marks the current recording as one whose result is shown by the client.
+func (s *State) SetQuietFinish(quiet bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.quietFinish = quiet
+}
+
+// QuietFinish reports whether the current recording is flagged quiet.
+func (s *State) QuietFinish() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.quietFinish
 }
 
 // SetOBSState sets the OBS recording and pause state.

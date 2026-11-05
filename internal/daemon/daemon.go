@@ -171,6 +171,9 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 		if m, ok := req.Options["mic"].(bool); ok {
 			audio.Mic = m
 		}
+		if q, ok := req.Options["quiet_finish"].(bool); ok && q {
+			ctx = commands.WithQuietFinish(ctx)
+		}
 	}
 
 	var err error

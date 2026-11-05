@@ -103,8 +103,11 @@ seconds. Escape closes the window and Enter starts recording. The choices are
 remembered in `$XDG_CONFIG_HOME/sway-easyshot/record-gui.json`
 (`~/.config` when unset).
 
-The window hides whilst recording and returns, with a notice of the saved file,
-once the recording ends. Running `record-gui` whilst a recording is in progress
+The window hides whilst recording and returns, showing a result card, once the
+recording ends: a frame from the video, its name, duration, resolution and size,
+with buttons to play it, reveal it in the file manager, copy its path, rename it
+or move it to the bin. "New recording" (or Escape) returns to the setup page.
+Previews and details rely on `ffmpeg` and `ffprobe`. Running `record-gui` whilst a recording is in progress
 stops it and shows the window again, so a single key binding suffices. If the
 key is pressed whilst the recording is still being set up (countdown or region
 selection), the stop is held and applied as soon as recording begins. Monitor
@@ -118,6 +121,11 @@ which other clients may use as well:
   bypassing the interactive selection when present.
 - `movie-geometry` is a new action recording the `geometry` option, given in
   slurp form (`"X,Y WxH"`). It honours `delay`, `audio` and `mic`.
+- `quiet_finish` (boolean, on any recording start) tells the daemon that the
+  client presents the result itself. When such a recording stops, the daemon
+  sends only a brief "Recording saved" notification, without the copy, show,
+  rename and delete actions, and does not wait for a choice. The flag lasts for
+  that recording only; recordings started by other means keep the actions.
 
 ## Waybar Configuration
 

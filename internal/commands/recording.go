@@ -31,6 +31,13 @@ func NewRecordingHandler(cfg *config.Config, st *state.State) *RecordingHandler 
 	}
 }
 
+type quietFinishKey struct{}
+
+// WithQuietFinish marks a start request whose client presents the result itself.
+func WithQuietFinish(ctx context.Context) context.Context {
+	return context.WithValue(ctx, quietFinishKey{}, true)
+}
+
 // MovieSelection records a video of a selected region.
 func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, audio external.AudioSources) error {
 	if err := notify.CaptureDelay(delay, "movie selection", h.cfg.RecordingStartIcon); err != nil {
@@ -129,7 +136,10 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 		return fmt.Errorf("failed to start recording: %w", err)
 	}
 
-	// Update state
+	// Publish the quiet flag before the recording becomes visible so a
+	// concurrent stop never sees the recording without its flag.
+	quiet, _ := ctx.Value(quietFinishKey{}).(bool)
+	h.state.SetQuietFinish(quiet)
 	h.state.SetRecording(true, file, cmd.Process.Pid)
 
 	// Monitor process in background
@@ -155,6 +165,9 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 		}
 	}
 
+	// Read before signalling: the monitor goroutine clears it once the recorder exits.
+	quiet := h.state.QuietFinish()
+
 	if err := syscall.Kill(pid, syscall.SIGINT); err != nil {
 		return fmt.Errorf("failed to stop recording: %w", err)
 	}
@@ -178,6 +191,11 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 
 	// Update state
 	h.state.SetRecording(false, "", 0)
+
+	if quiet {
+		_ = notify.Send(2000, h.cfg.RecordingStopIcon, "Recording saved")
+		return nil
+	}
 
 	actions := map[string]string{
 		"copypath": "Copy path",

@@ -50,6 +50,7 @@ flowboxchild.er-tilechild { border-radius: 14px; padding: 2px; background: none;
 flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); box-shadow: inset 0 0 0 2px @accent_bg_color; }
 .er-pill { border-radius: 999px; padding: 10px 20px; opacity: 0.65; }
 .er-pill:checked { opacity: 1; background: @accent_bg_color; color: @accent_fg_color; }
+.er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
 .er-section { font-weight: 700; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.04em; }
 `
 
@@ -58,6 +59,8 @@ type app struct {
 	gtkApp       *adw.Application
 	win          *adw.ApplicationWindow
 	toasts       *adw.ToastOverlay
+	pages        *gtk.Stack
+	res          resultView
 	settings     Settings
 	settingsPath string
 
@@ -179,7 +182,7 @@ func (a *app) build() {
 	}
 
 	a.win = adw.NewApplicationWindow(&a.gtkApp.Application)
-	a.win.SetTitle("Record screen")
+	a.win.SetTitle(setupTitle)
 	a.win.SetDefaultSize(520, -1)
 	// A fixed-size window is floated by tiling compositors, keeping the dialogue compact.
 	a.win.SetResizable(false)
@@ -194,9 +197,19 @@ func (a *app) build() {
 	key.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
 		switch keyval {
 		case gdk.KEY_Escape:
+			if a.res.dialogOpen {
+				return false
+			}
+			if !a.onSetupPage() {
+				a.showSetup()
+				return true
+			}
 			a.win.Close()
 			return true
 		case gdk.KEY_Return, gdk.KEY_KP_Enter:
+			if !a.onSetupPage() {
+				return false
+			}
 			a.startRecording()
 			return true
 		}
@@ -226,8 +239,15 @@ func (a *app) build() {
 	rec.ConnectClicked(a.startRecording)
 	body.Append(rec)
 
+	a.pages = gtk.NewStack()
+	a.pages.SetTransitionType(gtk.StackTransitionTypeCrossfade)
+	a.pages.SetVhomogeneous(false)
+	a.pages.AddNamed(body, pageSetup)
+	a.pages.AddNamed(a.buildResult(), pageResult)
+	a.pages.SetVisibleChildName(pageSetup)
+
 	a.toasts = adw.NewToastOverlay()
-	a.toasts.SetChild(body)
+	a.toasts.SetChild(a.pages)
 
 	root := gtk.NewBox(gtk.OrientationVertical, 0)
 	root.Append(adw.NewHeaderBar())
@@ -517,7 +537,7 @@ func (a *app) captureThumb(output string) {
 }
 
 func (a *app) thumbsWanted() bool {
-	return a.win != nil && a.win.IsVisible() && a.stack.VisibleChildName() == SourceMonitor
+	return a.win != nil && a.win.IsVisible() && a.onSetupPage() && a.stack.VisibleChildName() == SourceMonitor
 }
 
 // updateThumbTimer runs the refresh timer only whilst thumbnails are on show.
@@ -614,6 +634,8 @@ func (a *app) startRecording() {
 		}
 	}
 
+	req.Options["quiet_finish"] = true
+
 	a.busy = true
 	a.mu.Lock()
 	a.pending = true
@@ -628,7 +650,7 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	time.Sleep(hideSettle)
 
 	if err := a.b.EnsureDaemon(); err != nil {
-		a.finish("", err)
+		a.finish(nil, err)
 		return
 	}
 
@@ -642,7 +664,7 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 			if errors.Is(err, sway.ErrWindowGone) {
 				err = errors.New("the selected window has since closed")
 			}
-			a.finish("", err)
+			a.finish(nil, err)
 			return
 		}
 		req.Options["geometry"] = w.Geometry()
@@ -658,7 +680,7 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	a.stopLatched = false
 	a.mu.Unlock()
 	if err != nil {
-		a.finish("", err)
+		a.finish(nil, err)
 		return
 	}
 
@@ -667,7 +689,7 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 		file = resp.State.RecordingFile
 	}
 	if file == "" {
-		a.finish("", errors.New("the daemon did not report a recording file"))
+		a.finish(nil, errors.New("the daemon did not report a recording file"))
 		return
 	}
 
@@ -682,7 +704,7 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 		st := a.state()
 		if st == nil {
 			if failures++; failures >= 3 {
-				a.finish("", errors.New("the daemon could not be reached to confirm the recording"))
+				a.finish(nil, errors.New("the daemon could not be reached to confirm the recording"))
 				return
 			}
 			continue
@@ -694,13 +716,30 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 	}
 
 	if _, err := os.Stat(file); err != nil {
-		a.finish("", fmt.Errorf("the recording %s could not be found", filepath.Base(file)))
+		a.finish(nil, fmt.Errorf("the recording %s could not be found", filepath.Base(file)))
 		return
 	}
-	a.finish(filepath.Base(file), nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	info, err := ProbeMedia(ctx, file)
+	cancel()
+	if err != nil {
+		// The file is saved; show the card with whatever details are known.
+		log.Printf("inspect %s: %v", file, err)
+		info = MediaInfo{}
+		if st, serr := os.Stat(file); serr == nil {
+			info.Size = st.Size()
+		}
+	}
+	a.finish(&savedRecording{file: file, info: info}, nil)
 }
 
-func (a *app) finish(saved string, err error) {
+type savedRecording struct {
+	file string
+	info MediaInfo
+}
+
+func (a *app) finish(saved *savedRecording, err error) {
 	a.mu.Lock()
 	a.pending = false
 	a.mu.Unlock()
@@ -708,12 +747,11 @@ func (a *app) finish(saved string, err error) {
 		a.busy = false
 		a.win.SetVisible(true)
 		a.win.Present()
-		a.refresh()
-		a.updateThumbTimer()
 		if err != nil {
+			a.showSetup()
 			a.toast("Regrettably, the recording failed: " + err.Error())
 			return
 		}
-		a.toast("Recording saved: " + saved)
+		a.showResult(saved.file, saved.info)
 	})
 }
