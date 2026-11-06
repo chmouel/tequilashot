@@ -58,6 +58,33 @@ func trimSeconds(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', 9, 64)
 }
 
+// snapTrimSegments moves each boundary onto the first source frame at or after
+// it, so audio and video share one origin and the exported span is made only of
+// whole frames.
+func snapTrimSegments(ctx context.Context, source string, segments []trimSegment, duration time.Duration) ([]trimSegment, error) {
+	clock, err := probeFrameClock(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+	snapped := make([]trimSegment, len(segments))
+	for i, segment := range segments {
+		start, err := snapFrameTime(ctx, source, clock, segment.start, duration)
+		if err != nil {
+			return nil, err
+		}
+		end, err := snapFrameTime(ctx, source, clock, segment.end, duration)
+		if err != nil {
+			return nil, err
+		}
+		if start < end {
+			snapped[i] = trimSegment{start, end}
+		} else {
+			snapped[i] = segment
+		}
+	}
+	return snapped, nil
+}
+
 func trimFilters(segments []trimSegment, audio bool) string {
 	var filters, inputs []string
 	for i, segment := range segments {
@@ -101,6 +128,10 @@ func trimHasAudio(ctx context.Context, file string) (bool, error) {
 
 func exportTrim(ctx context.Context, source string, selection trimSelection, progress func(float64)) (string, MediaInfo, error) {
 	segments, err := selection.segments()
+	if err != nil {
+		return "", MediaInfo{}, err
+	}
+	segments, err = snapTrimSegments(ctx, source, segments, selection.duration)
 	if err != nil {
 		return "", MediaInfo{}, err
 	}

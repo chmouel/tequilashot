@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"math"
 	"os"
@@ -183,5 +184,137 @@ func TestTrimPreservesAudioDelay(t *testing.T) {
 	}
 	if energy(0, 1600) > 10 || energy(3200, 5600) < 500 {
 		t.Fatal("the original audio delay was lost")
+	}
+}
+
+func trimStreamDurations(t *testing.T, file string) map[string]time.Duration {
+	t.Helper()
+	out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "stream=codec_type,duration", "-of", "json", file).Output() //nolint:gosec
+	if err != nil {
+		t.Fatalf("ffprobe: %v", err)
+	}
+	var data struct {
+		Streams []struct {
+			Type     string `json:"codec_type"`
+			Duration string `json:"duration"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(out, &data); err != nil {
+		t.Fatal(err)
+	}
+	durations := make(map[string]time.Duration, len(data.Streams))
+	for _, stream := range data.Streams {
+		if stream.Duration == "" || stream.Duration == "N/A" {
+			continue
+		}
+		value, err := time.ParseDuration(stream.Duration + "s")
+		if err != nil {
+			t.Fatal(err)
+		}
+		durations[stream.Type] = value
+	}
+	return durations
+}
+
+func trimLastFrameDuration(t *testing.T, file string) time.Duration {
+	t.Helper()
+	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=duration_time", "-of", "csv=p=0", file).Output() //nolint:gosec
+	if err != nil {
+		t.Fatalf("ffprobe: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		value, _, _ := strings.Cut(strings.TrimSpace(lines[i]), ",")
+		if value == "" || value == "N/A" {
+			continue
+		}
+		duration, err := time.ParseDuration(value + "s")
+		if err == nil {
+			return duration
+		}
+	}
+	t.Fatal("no frame duration was reported")
+	return 0
+}
+
+func TestExportTrimSnapsToFrames(t *testing.T) {
+	for _, tool := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip(tool + " is not installed")
+		}
+	}
+	source := filepath.Join(t.TempDir(), "unaligned.mp4")
+	trimTestCommand(t, "-f", "lavfi", "-i", "color=red:s=160x96:r=20:d=4",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:v", "libx264", "-g", "80", "-c:a", "aac", source)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	path, _, err := exportTrim(ctx, source, trimSelection{375 * time.Millisecond, 850 * time.Millisecond, 4 * time.Second, false}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	durations := trimStreamDurations(t, path)
+	video, audio := durations["video"], durations["audio"]
+	const want = 450 * time.Millisecond
+	if video == 0 || audio == 0 {
+		t.Fatalf("missing stream durations: %v", durations)
+	}
+	if math.Abs((video - want).Seconds()) > 0.02 {
+		t.Fatalf("video lasts %s; expected the frames from 0.400s for %s", video, want)
+	}
+	if math.Abs((audio - video).Seconds()) > 0.01 {
+		t.Fatalf("video lasts %s but audio lasts %s; the streams do not share a start", video, audio)
+	}
+}
+
+func TestExportTrimSparseFrameDuration(t *testing.T) {
+	for _, tool := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip(tool + " is not installed")
+		}
+	}
+	source := filepath.Join(t.TempDir(), "sparse.mp4")
+	trimTestCommand(t, "-f", "lavfi", "-i", "nullsrc=s=160x96:r=60:d=2,select='not(mod(n,2))*not(mod(n,5))'",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:v", "libx264", "-crf", "18", "-g", "12", "-bf", "0", "-fps_mode", "vfr", "-c:a", "aac", source)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	info, err := ProbeMedia(ctx, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock, err := probeFrameClock(ctx, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	window, err := loadFrameWindow(ctx, source, clock, 0, info.Duration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var start, requestedEnd, snappedEnd time.Duration
+	for i := 4; i < len(window.times); i++ {
+		if gap := window.times[i] - window.times[i-1]; gap >= 60*time.Millisecond {
+			start = window.times[i-1]
+			requestedEnd = start + gap/2
+			snappedEnd = window.times[i]
+			break
+		}
+	}
+	if snappedEnd == 0 {
+		t.Fatal("the sparse fixture has no gap to trim across")
+	}
+	path, _, err := exportTrim(ctx, source, trimSelection{start, requestedEnd, info.Duration, false}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	span := snappedEnd - start
+	durations := trimStreamDurations(t, path)
+	video, audio := durations["video"], durations["audio"]
+	if math.Abs((video - span).Seconds()) > 0.02 {
+		t.Fatalf("video lasts %s; expected the single held frame for %s", video, span)
+	}
+	if math.Abs((audio - video).Seconds()) > 0.01 {
+		t.Fatalf("video lasts %s but audio lasts %s at the frame-snapped end", video, audio)
+	}
+	if last := trimLastFrameDuration(t, path); math.Abs((last - span).Seconds()) > 0.02 {
+		t.Fatalf("the last frame is displayed for %s; expected %s", last, span)
 	}
 }

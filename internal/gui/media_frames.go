@@ -67,6 +67,33 @@ func (w frameWindow) index(at time.Duration) int {
 	return max(0, sort.Search(len(w.times), func(i int) bool { return w.times[i] > at })-1)
 }
 
+func (w frameWindow) snap(at time.Duration) (time.Duration, bool) {
+	i := sort.Search(len(w.times), func(i int) bool { return w.times[i] >= at })
+	if i == len(w.times) {
+		return 0, false
+	}
+	return w.times[i], true
+}
+
+// snapFrameTime returns the timestamp of the first frame at or after at, and
+// duration when no frame starts before the recording ends.
+func snapFrameTime(ctx context.Context, file string, clock *frameClock, at, duration time.Duration) (time.Duration, error) {
+	if at <= 0 {
+		return 0, nil
+	}
+	if at >= duration {
+		return duration, nil
+	}
+	window, err := loadFrameWindow(ctx, file, clock, at, duration)
+	if err != nil {
+		return 0, err
+	}
+	if snapped, ok := window.snap(at); ok {
+		return snapped, nil
+	}
+	return duration, nil
+}
+
 func loadFrameWindow(ctx context.Context, file string, clock *frameClock, at, duration time.Duration) (frameWindow, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

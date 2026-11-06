@@ -39,6 +39,8 @@ type trimView struct {
 	frameSteps, frameAction, frameGen            int
 	frameLoading, framePending                   bool
 	frameCancel                                  context.CancelFunc
+	snapGen                                      int
+	snapCancel                                   context.CancelFunc
 	history                                      trimHistory
 	undo, redo                                   *gtk.Button
 	file, mode, returnPage                       string
@@ -311,11 +313,12 @@ func (a *app) buildTrim() *gtk.Box {
 			a.seekTrim(at)
 			if spin.StateFlags()&gtk.StateFlagFocusWithin == 0 {
 				a.commitTrimEdit()
+				a.snapTrimSelection()
 			}
 		})
-		spin.ConnectActivate(func() { spin.Update(); a.commitTrimEdit() })
+		spin.ConnectActivate(func() { spin.Update(); a.commitTrimEdit(); a.snapTrimSelection() })
 		focus := gtk.NewEventControllerFocus()
-		focus.ConnectLeave(func() { spin.Update(); a.commitTrimEdit() })
+		focus.ConnectLeave(func() { spin.Update(); a.commitTrimEdit(); a.snapTrimSelection() })
 		spin.AddController(focus)
 	}
 	t.controls.Append(selection)
@@ -429,7 +432,7 @@ func (a *app) buildTrimTimeline() *gtk.Overlay {
 		}
 		a.seekTrim(at)
 	})
-	finishDrag := func() { t.timeline.SetCursorFromName("default"); a.commitTrimEdit() }
+	finishDrag := func() { t.timeline.SetCursorFromName("default"); a.commitTrimEdit(); a.snapTrimSelection() }
 	drag.ConnectDragEnd(func(_, _ float64) { finishDrag() })
 	drag.ConnectCancel(func(_ *gdk.EventSequence) { finishDrag() })
 	t.timeline.AddController(drag)
@@ -600,6 +603,53 @@ func trimClock(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d.%03d", ms/60000, ms/1000%60, ms%1000)
 }
 
+// snapTrimSelection moves the selection ends onto frame timestamps so the
+// export and the values shown agree on where each stream starts and stops.
+func (a *app) snapTrimSelection() {
+	t := &a.trim
+	if t.export != nil || t.media == nil || !t.media.IsSeekable() || t.selection.duration <= 0 {
+		return
+	}
+	if _, err := t.selection.segments(); err != nil {
+		return
+	}
+	t.snapGen++
+	if t.snapCancel != nil {
+		t.snapCancel()
+		t.snapCancel = nil
+	}
+	gen, file, duration, selection := t.snapGen, t.file, t.selection.duration, t.selection
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.snapCancel = cancel
+	go func() {
+		defer cancel()
+		clock, err := probeFrameClock(ctx, file)
+		if err != nil {
+			return
+		}
+		start, err := snapFrameTime(ctx, file, clock, selection.start, duration)
+		if err != nil {
+			return
+		}
+		end, err := snapFrameTime(ctx, file, clock, selection.end, duration)
+		if err != nil || start >= end {
+			return
+		}
+		glib.IdleAdd(func() {
+			if a.closing || gen != t.snapGen || t.export != nil || t.selection != selection {
+				return
+			}
+			t.snapCancel = nil
+			if start == t.selection.start && end == t.selection.end {
+				return
+			}
+			t.selection.start, t.selection.end = start, end
+			a.updateTrim()
+			a.commitTrimEdit()
+		})
+	}()
+}
+
 func (a *app) seekTrim(at time.Duration) {
 	a.cancelTrimFrameImage()
 	a.cancelTrimFrameNavigation()
@@ -746,6 +796,11 @@ func (a *app) stopTrim() {
 	a.cancelTrimFrameImage()
 	a.cancelTrimFrameNavigation()
 	t := &a.trim
+	t.snapGen++
+	if t.snapCancel != nil {
+		t.snapCancel()
+		t.snapCancel = nil
+	}
 	t.frameClock, t.frames = nil, frameWindow{}
 	t.gen++
 	t.seekQueued, t.playOnSeek = false, false
