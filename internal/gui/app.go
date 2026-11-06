@@ -81,6 +81,15 @@ type app struct {
 	regionHint   *gtk.Label
 	windowHint   *gtk.Label
 
+	replayDurationBox *gtk.Box
+	replayDuration    map[int]*gtk.ToggleButton
+	replayCaption     *gtk.Label
+	replayTimer       glib.SourceHandle
+	replayActive      bool
+	replayBusy        bool
+	replayPolling     bool
+	replayShowPending bool
+
 	srcButtons  map[string]*gtk.ToggleButton
 	stack       *gtk.Stack
 	flow        *gtk.FlowBox
@@ -207,7 +216,14 @@ func (a *app) activate() {
 		a.gtkApp.Hold()
 	}
 
+	if a.replayBusy {
+		return
+	}
 	if a.busy {
+		if a.settings.Mode == ModeReplay {
+			a.replayShowPending = true
+			return
+		}
 		if a.settings.Mode == ModeScreenshot {
 			return
 		}
@@ -233,7 +249,13 @@ func (a *app) activate() {
 	}
 
 	go func() {
-		if st := a.state(); st != nil && st.Recording {
+		if st := a.state(); st != nil && st.Replay {
+			glib.IdleAdd(func() {
+				a.showReplay(st)
+				a.win.Present()
+			})
+			return
+		} else if st != nil && st.Recording {
 			a.stopRecording()
 			for i := 0; i < 100; i++ {
 				if st := a.state(); st == nil || !st.Recording {
@@ -342,6 +364,10 @@ func (a *app) build() {
 			if a.res.dialogOpen {
 				return false
 			}
+			if a.pages.VisibleChildName() == pageReplay {
+				a.win.Close()
+				return true
+			}
 			if !a.onSetupPage() {
 				a.showSetup()
 				return true
@@ -377,6 +403,8 @@ func (a *app) build() {
 	a.countdownBox.Append(section("Countdown"))
 	a.countdownBox.Append(a.buildCountdown())
 	body.Append(a.countdownBox)
+	a.replayDurationBox = a.buildReplayDuration()
+	body.Append(a.replayDurationBox)
 
 	rec := gtk.NewButtonWithLabel("Record")
 	rec.AddCSSClass("suggested-action")
@@ -396,6 +424,7 @@ func (a *app) build() {
 	setup.Append(a.cameraRevealer)
 	a.pages.AddNamed(setup, pageSetup)
 	a.pages.AddNamed(a.buildResult(), pageResult)
+	a.pages.AddNamed(a.buildReplayControls(), pageReplay)
 	a.pages.SetVisibleChildName(pageSetup)
 	a.pages.NotifyProperty("visible-child-name", a.syncPreview)
 
@@ -417,6 +446,8 @@ func (a *app) setupTitle() string {
 	switch a.settings.Mode {
 	case ModeScreenshot:
 		return "Capture screen"
+	case ModeReplay:
+		return "Instant replay"
 	case ModeCamera:
 		return "Virtual camera"
 	}
@@ -428,7 +459,7 @@ func (a *app) buildMode() *gtk.Box {
 	box.AddCSSClass("linked")
 	box.SetHAlign(gtk.AlignCenter)
 	var first *gtk.ToggleButton
-	for _, mode := range []struct{ id, title string }{{ModeScreenshot, "Screenshot"}, {ModeVideo, "Video"}, {ModeCamera, "Camera"}} {
+	for _, mode := range []struct{ id, title string }{{ModeScreenshot, "Screenshot"}, {ModeVideo, "Video"}, {ModeReplay, "Replay"}, {ModeCamera, "Camera"}} {
 		b := gtk.NewToggleButtonWithLabel(mode.title)
 		if first == nil {
 			first = b
@@ -451,15 +482,30 @@ func (a *app) buildMode() *gtk.Box {
 func (a *app) updateMode() {
 	video := a.settings.Mode == ModeVideo
 	live := a.settings.Mode == ModeCamera
-	a.audioSection.SetVisible(video || live)
-	a.desktop.SetVisible(video)
-	a.mic.SetVisible(video)
-	a.micRevealer.SetVisible(video)
+	replay := a.settings.Mode == ModeReplay
+	a.replayDurationBox.SetVisible(replay)
+	for id, b := range a.srcButtons {
+		b.SetVisible(!replay || id == SourceMonitor)
+		if !replay && b.Active() {
+			a.stack.SetVisibleChildName(id)
+		}
+	}
+	if replay {
+		a.stack.SetVisibleChildName(SourceMonitor)
+	}
+	a.camera.SetVisible(!replay && len(a.cameras) > 0)
+	a.audioSection.SetVisible(video || live || replay)
+	a.desktop.SetVisible(video || replay)
+	a.mic.SetVisible(video || replay)
+	a.micRevealer.SetVisible(video || replay)
 	a.cropRow.SetVisible(video)
-	a.countdownBox.SetVisible(!live)
+	a.countdownBox.SetVisible(!live && !replay)
 	a.cameraRevealer.SetVisible(video || live)
 	a.shapeRow.SetVisible(!live)
 	switch {
+	case replay:
+		a.audioTitle.SetText(strings.ToUpper("Audio"))
+		a.startButton.SetLabel("Start buffering")
 	case video:
 		a.audioTitle.SetText(strings.ToUpper("Audio & camera"))
 		a.startButton.SetLabel("Record")
@@ -479,6 +525,7 @@ func (a *app) updateMode() {
 	a.syncShape()
 	a.syncCameraRevealer()
 	a.syncPreview()
+	a.updateThumbTimer()
 }
 
 func (a *app) saveSettings(s Settings) {
@@ -662,14 +709,20 @@ func (a *app) buildCountdown() *gtk.Box {
 
 func (a *app) collect() Settings {
 	s := Settings{
-		Mode:    a.settings.Mode,
-		Source:  SourceMonitor,
-		Monitor: a.monName,
-		CropTop: a.crop.ValueAsInt(),
-		Desktop: a.desktop.Active(),
-		Mic:     a.mic.Active(),
+		Mode:          a.settings.Mode,
+		ReplaySeconds: a.settings.ReplaySeconds,
+		Source:        SourceMonitor,
+		Monitor:       a.monName,
+		CropTop:       a.crop.ValueAsInt(),
+		Desktop:       a.desktop.Active(),
+		Mic:           a.mic.Active(),
 
 		MicDevice: a.micSel,
+	}
+	for n, b := range a.replayDuration {
+		if b.Active() {
+			s.ReplaySeconds = n
+		}
 	}
 	a.cameraSettings(&s)
 	for id, b := range a.srcButtons {
@@ -964,7 +1017,7 @@ func (a *app) startCapture() {
 	if a.busy || a.closing {
 		return
 	}
-	if a.settings.Mode == ModeVideo && a.mic.Active() && a.micSel != "" && !a.micsKnown {
+	if (a.settings.Mode == ModeVideo || a.settings.Mode == ModeReplay) && a.mic.Active() && a.micSel != "" && !a.micsKnown {
 		a.toast("Checking the microphones; please press Record again in a moment")
 		return
 	}
@@ -983,6 +1036,10 @@ func (a *app) startCapture() {
 			chosen = &a.windows[a.winIdx]
 			sel.Geometry = chosen.Geometry()
 		}
+	}
+	if s.Mode == ModeReplay {
+		sel.Monitor = a.monName
+		chosen = nil
 	}
 	sel.CameraDevice = a.camSel
 	req, err := BuildRequest(s, sel)
@@ -1051,6 +1108,19 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 		a.finish(nil, err)
 		return
 	}
+	if req.Action == "replay-start" {
+		glib.IdleAdd(func() {
+			a.busy = false
+			if resp.State != nil && resp.State.Replay {
+				a.showReplay(resp.State)
+				if a.replayShowPending {
+					a.win.Present()
+				}
+			}
+			a.replayShowPending = false
+		})
+		return
+	}
 	if req.Action == "virtual-camera-start" {
 		a.waitVirtualCamera(latched)
 		return
@@ -1105,18 +1175,7 @@ func (a *app) run(req protocol.Request, chosen *sway.Window) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	info, err := ProbeMedia(ctx, file)
-	cancel()
-	if err != nil {
-		// The file is saved; show the card with whatever details are known.
-		log.Printf("inspect %s: %v", file, err)
-		info = MediaInfo{}
-		if st, serr := os.Stat(file); serr == nil {
-			info.Size = st.Size()
-		}
-	}
-	a.finish(&savedCapture{file: file, info: info, mode: ModeVideo}, nil)
+	a.finish(&savedCapture{file: file, info: probeSavedVideo(file), mode: ModeVideo}, nil)
 }
 
 // waitVirtualCamera returns to the dialogue once the virtual camera stops.
@@ -1160,7 +1219,7 @@ func (a *app) finish(saved *savedCapture, err error) {
 		a.win.Present()
 		if err != nil {
 			a.showSetup()
-			kind := map[string]string{ModeScreenshot: "screenshot", ModeCamera: "virtual camera"}[a.settings.Mode]
+			kind := map[string]string{ModeScreenshot: "screenshot", ModeCamera: "virtual camera", ModeReplay: "replay"}[a.settings.Mode]
 			if kind == "" {
 				kind = "recording"
 			}

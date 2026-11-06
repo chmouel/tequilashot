@@ -97,3 +97,31 @@ func TestParseMicDevice(t *testing.T) {
 		t.Errorf("got %q, %v", got, err)
 	}
 }
+
+func TestReplayRequests(t *testing.T) {
+	d := New(&config.Config{SaveLocation: t.TempDir()}, false)
+	defer d.cancel()
+	for _, seconds := range []any{"60", true, nil, 60.5, 0.0, 86400.0} {
+		resp := d.executeCommand(protocol.Request{Action: "replay-start", Options: map[string]interface{}{"seconds": seconds}})
+		if resp.Success || resp.Message != "replay duration must be 30, 60 or 120 seconds" {
+			t.Errorf("accepted invalid duration %v: %+v", seconds, resp)
+		}
+	}
+	for _, action := range []string{"replay-save", "replay-stop"} {
+		resp := d.executeCommand(protocol.Request{Action: action})
+		if resp.Success || resp.File != "" || resp.State == nil || resp.State.Replay {
+			t.Errorf("unexpected inactive replay response: %+v", resp)
+		}
+	}
+	d.state.SetReplay(true, "DP-1", 60)
+	resp := d.executeCommand(protocol.Request{Action: "waybar-status", Options: map[string]interface{}{
+		"icons": map[string]interface{}{"Replay": "R"},
+	}})
+	var status protocol.WaybarStatus
+	if err := json.Unmarshal([]byte(resp.Message), &status); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Success || !resp.State.Replay || status.Class != "replay" || status.Text != "R" {
+		t.Fatalf("unexpected replay response: %+v %+v", resp, status)
+	}
+}

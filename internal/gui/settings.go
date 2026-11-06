@@ -14,6 +14,7 @@ import (
 // Capture modes and source kinds selectable in the dialogue
 const (
 	ModeVideo      = "video"
+	ModeReplay     = "replay"
 	ModeScreenshot = "screenshot"
 	// ModeCamera offers the source as a virtual camera.
 	ModeCamera = "camera"
@@ -25,14 +26,15 @@ const (
 
 // Settings holds the choices remembered between launches.
 type Settings struct {
-	Mode      string `json:"mode"`
-	Source    string `json:"source"`
-	Monitor   string `json:"monitor"`
-	CropTop   int    `json:"crop_top"`
-	Desktop   bool   `json:"desktop_audio"`
-	Mic       bool   `json:"microphone"`
-	MicDevice string `json:"mic_device"`
-	Countdown int    `json:"countdown"`
+	ReplaySeconds int    `json:"replay_seconds"`
+	Mode          string `json:"mode"`
+	Source        string `json:"source"`
+	Monitor       string `json:"monitor"`
+	CropTop       int    `json:"crop_top"`
+	Desktop       bool   `json:"desktop_audio"`
+	Mic           bool   `json:"microphone"`
+	MicDevice     string `json:"mic_device"`
+	Countdown     int    `json:"countdown"`
 
 	Camera         bool   `json:"camera"`
 	CameraDevice   string `json:"camera_device"`
@@ -46,6 +48,7 @@ type Settings struct {
 func DefaultSettings() Settings {
 	return Settings{
 		Mode:           ModeVideo,
+		ReplaySeconds:  60,
 		Source:         SourceMonitor,
 		Desktop:        true,
 		CameraPosition: external.CameraBottomRight,
@@ -79,7 +82,7 @@ func LoadSettings(path string) Settings {
 		return DefaultSettings()
 	}
 	switch s.Mode {
-	case ModeVideo, ModeScreenshot, ModeCamera:
+	case ModeVideo, ModeScreenshot, ModeCamera, ModeReplay:
 	default:
 		s.Mode = ModeVideo
 	}
@@ -87,6 +90,9 @@ func LoadSettings(path string) Settings {
 	case SourceMonitor, SourceWindow, SourceRegion:
 	default:
 		s.Source = SourceMonitor
+	}
+	if !external.ValidReplaySeconds(s.ReplaySeconds) {
+		s.ReplaySeconds = 60
 	}
 	if s.CropTop < 0 {
 		s.CropTop = 0
@@ -154,6 +160,21 @@ type Selection struct {
 
 // BuildRequest converts the dialogue choices into a daemon request.
 func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
+	if s.Mode == ModeReplay {
+		req := protocol.Request{Command: "execute", Action: "replay-start", Options: map[string]interface{}{
+			"output": sel.Monitor, "seconds": s.ReplaySeconds, "audio": s.Desktop, "mic": s.Mic,
+		}}
+		if sel.Monitor == "" {
+			return req, errors.New("no monitor selected")
+		}
+		if !external.ValidReplaySeconds(s.ReplaySeconds) {
+			return req, errors.New("replay duration must be 30, 60 or 120 seconds")
+		}
+		if s.Mic && s.MicDevice != "" {
+			req.Options["mic_device"] = s.MicDevice
+		}
+		return req, nil
+	}
 	if s.Mode == ModeScreenshot {
 		req := protocol.Request{Command: "execute", Action: "screenshot", Options: map[string]interface{}{"delay": s.Countdown}}
 		switch s.Source {

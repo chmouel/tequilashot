@@ -17,6 +17,9 @@ type Response struct {
 
 // State represents the current daemon state
 type State struct {
+	Replay        bool   `json:"replay,omitempty"`
+	ReplayOutput  string `json:"replay_output,omitempty"`
+	ReplaySeconds int    `json:"replay_seconds,omitempty"`
 	Recording     bool   `json:"recording"`
 	Paused        bool   `json:"paused"`
 	RecordingFile string `json:"recording_file,omitempty"`

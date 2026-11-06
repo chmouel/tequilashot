@@ -11,6 +11,9 @@ import (
 // State tracks the current state of recordings.
 type State struct {
 	mu                 sync.RWMutex
+	replay             bool
+	replayOutput       string
+	replaySeconds      int
 	recording          bool
 	paused             bool
 	recordingFile      string
@@ -29,6 +32,7 @@ type Icons struct {
 	Paused    string
 	Countdown string
 	Live      string
+	Replay    string
 }
 
 // DefaultIcons returns the default icon set.
@@ -39,6 +43,7 @@ func DefaultIcons() Icons {
 		Paused:    "󰏤",
 		Countdown: "⏱",
 		Live:      "󰄀",
+		Replay:    "↶",
 	}
 }
 
@@ -62,10 +67,23 @@ func (s *State) GetState() *protocol.State {
 	defer s.mu.RUnlock()
 
 	return &protocol.State{
+		Replay:        s.replay,
+		ReplayOutput:  s.replayOutput,
+		ReplaySeconds: s.replaySeconds,
 		Recording:     s.recording,
 		Paused:        s.paused,
 		RecordingFile: s.recordingFile,
 		VirtualCamera: s.virtualCamera,
+	}
+}
+
+// SetReplay publishes replay independently of recording and virtual camera state.
+func (s *State) SetReplay(active bool, output string, seconds int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replay, s.replayOutput, s.replaySeconds = active, output, seconds
+	if active {
+		s.paused = false
 	}
 }
 
@@ -146,7 +164,7 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Priority: countdown > screen recorder > virtual camera
+	// Priority: countdown > screen recorder/replay > virtual camera
 	if s.countdownRemaining > 0 {
 		return &protocol.WaybarStatus{
 			Text:    fmt.Sprintf("%s %d", s.icons.Countdown, s.countdownRemaining),
@@ -174,6 +192,10 @@ func (s *State) GetWaybarStatus() *protocol.WaybarStatus {
 			Class:   "recording",
 			Alt:     "recording",
 		}
+	}
+
+	if s.replay {
+		return &protocol.WaybarStatus{Text: s.icons.Replay, Tooltip: fmt.Sprintf("Replay buffering: %s (last %d seconds)", s.replayOutput, s.replaySeconds), Class: "replay", Alt: "replay"}
 	}
 
 	if s.virtualCamera {

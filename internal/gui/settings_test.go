@@ -27,8 +27,9 @@ func TestSettingsPathUsesTequilashotIdentity(t *testing.T) {
 func TestSettingsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "tequilashot.json")
 	want := Settings{
-		Mode:   ModeScreenshot,
-		Source: SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,
+		ReplaySeconds: 60,
+		Mode:          ModeScreenshot,
+		Source:        SourceWindow, Monitor: "DP-1", CropTop: 40, Desktop: false, Mic: true, Countdown: 5,
 		Camera: true, CameraDevice: "/dev/video2", CameraPosition: "top-left", CameraSize: "large", CameraShape: "circle", CameraMirror: true,
 	}
 	if err := SaveSettings(path, want); err != nil {
@@ -46,6 +47,7 @@ func TestLoadSettingsMode(t *testing.T) {
 		{`{"mode":"unknown","source":"region","desktop_audio":false,"countdown":5}`, ModeVideo},
 		{`{"mode":"screenshot","source":"region","desktop_audio":false,"countdown":5}`, ModeScreenshot},
 		{`{"mode":"camera","source":"region","desktop_audio":false,"countdown":5}`, ModeCamera},
+		{`{"mode":"replay","source":"region","desktop_audio":false,"countdown":5}`, ModeReplay},
 	} {
 		if err := os.WriteFile(path, []byte(tc.data), 0o600); err != nil {
 			t.Fatal(err)
@@ -54,6 +56,39 @@ func TestLoadSettingsMode(t *testing.T) {
 		if s.Mode != tc.mode || s.Source != SourceRegion || s.Desktop || s.Countdown != 5 {
 			t.Fatalf("settings not preserved: %+v", s)
 		}
+	}
+}
+
+func TestReplaySettingsAndRequest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	for _, data := range []string{`{}`, `{"replay_seconds":0}`, `{"replay_seconds":31}`} {
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := LoadSettings(path).ReplaySeconds; got != 60 {
+			t.Fatalf("%s: duration = %d", data, got)
+		}
+	}
+	s := DefaultSettings()
+	s.Mode, s.Source, s.ReplaySeconds = ModeReplay, SourceWindow, 120
+	s.Camera, s.CropTop, s.Countdown, s.Mic, s.MicDevice = true, 40, 5, true, "alsa_input.x"
+	if err := SaveSettings(path, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadSettings(path); got != s {
+		t.Fatalf("replay settings changed: %+v", got)
+	}
+	req, err := BuildRequest(s, Selection{Monitor: "DP-1", Geometry: "1,2 800x600", CameraDevice: "/dev/video0"})
+	want := map[string]interface{}{"output": "DP-1", "seconds": 120, "audio": true, "mic": true, "mic_device": "alsa_input.x"}
+	if err != nil || req.Action != "replay-start" || !reflect.DeepEqual(req.Options, want) {
+		t.Fatalf("unexpected replay request: %+v %v", req, err)
+	}
+	if _, err := BuildRequest(s, Selection{}); err == nil {
+		t.Fatal("accepted replay without a monitor")
+	}
+	s.ReplaySeconds = 10
+	if _, err := BuildRequest(s, Selection{Monitor: "DP-1"}); err == nil {
+		t.Fatal("accepted invalid replay duration")
 	}
 }
 

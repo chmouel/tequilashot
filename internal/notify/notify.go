@@ -1,10 +1,15 @@
 package notify
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
+	"time"
 )
+
+// sendTimeout bounds notify-send so a stalled notification daemon cannot block callers.
+const sendTimeout = 5 * time.Second
 
 // Send sends a desktop notification with a timeout, optional icon, and message.
 func Send(timeout int, icon, message string) error {
@@ -16,7 +21,9 @@ func Send(timeout int, icon, message string) error {
 	}
 	args = append(args, message)
 
-	cmd := exec.Command("notify-send", args...) //nolint:gosec
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "notify-send", args...) //nolint:gosec
 	return cmd.Run()
 }
 

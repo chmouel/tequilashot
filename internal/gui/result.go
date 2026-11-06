@@ -134,6 +134,12 @@ func (a *app) showSetup() {
 	if a.res.editing {
 		return
 	}
+	if a.replayActive {
+		a.pages.SetVisibleChildName(pageReplay)
+		a.win.SetTitle("Instant replay")
+		a.stopThumbTimer()
+		return
+	}
 	a.pages.SetVisibleChildName(pageSetup)
 	a.win.SetTitle(a.setupTitle())
 	a.refresh()
@@ -163,6 +169,10 @@ func (a *app) showResult(file string, info MediaInfo, mode string) {
 		r.open.SetLabel("Play")
 		r.open.SetIconName("media-playback-start-symbolic")
 		r.again.SetLabel("New recording")
+		if mode == ModeReplay {
+			a.win.SetTitle("Replay saved")
+			r.again.SetLabel("Back to replay")
+		}
 	}
 
 	go func() {

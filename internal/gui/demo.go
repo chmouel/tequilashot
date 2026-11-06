@@ -12,6 +12,7 @@ import (
 
 	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/internal/sway"
+	"github.com/chmouel/tequilashot/pkg/protocol"
 )
 
 const demoClip = "recording-20261105-13h04.mp4"
@@ -71,6 +72,8 @@ func init() {
 		s.Monitor, s.Mic, s.Countdown = "DP-1", true, 3
 		s.MicDevice = "studio-microphone"
 		switch page {
+		case "replay", "replay-active", "replay-result":
+			s.Mode = ModeReplay
 		case "screenshot", "screenshot-result":
 			s.Mode = ModeScreenshot
 		case "screenshot-window":
@@ -91,19 +94,26 @@ func init() {
 	demoStage = func(a *app) {
 		glib.TimeoutAdd(800, func() bool {
 			switch page {
+			case "replay-active":
+				a.showReplay(&protocol.State{Replay: true, ReplayOutput: "DP-1", ReplaySeconds: 60})
 			case "about":
 				a.showAbout()
 			case SourceWindow, "screenshot-window":
 				if row := a.winList.RowAtIndex(1); row != nil {
 					a.winList.SelectRow(row)
 				}
-			case "result":
+			case "result", "replay-result":
 				clip := filepath.Join(dir, demoClip)
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				info, err := ProbeMedia(ctx, clip)
 				cancel()
 				if err == nil {
-					a.showResult(clip, info, ModeVideo)
+					mode := ModeVideo
+					if page == "replay-result" {
+						a.showReplay(&protocol.State{Replay: true, ReplayOutput: "DP-1", ReplaySeconds: 60})
+						mode = ModeReplay
+					}
+					a.showResult(clip, info, mode)
 				}
 			case "screenshot-result":
 				file := filepath.Join(dir, "screenshot.png")

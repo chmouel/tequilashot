@@ -352,7 +352,7 @@ func (a *app) updatePreviewBase() {
 }
 
 func (a *app) syncCameraRevealer() {
-	a.cameraRevealer.SetRevealChild(a.settings.Mode != ModeScreenshot && a.camera.Active() && len(a.cameras) > 0)
+	a.cameraRevealer.SetRevealChild((a.settings.Mode == ModeVideo || a.settings.Mode == ModeCamera) && a.camera.Active() && len(a.cameras) > 0)
 }
 
 // probeCameras lists cameras off the main thread.
@@ -404,7 +404,7 @@ func (a *app) setCameras(modes []external.CameraMode, names map[string]string) {
 	a.camSel = want
 	a.camRow.SetSubtitle(glib.MarkupEscapeText(a.camSel))
 
-	a.camera.SetVisible(true)
+	a.camera.SetVisible(a.settings.Mode != ModeReplay)
 	a.syncCameraRevealer()
 	a.prevOverlay.QueueResize()
 	a.syncPreview()

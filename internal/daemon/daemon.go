@@ -101,8 +101,9 @@ func (d *Daemon) Start() error {
 // Stop stops the daemon server.
 func (d *Daemon) Stop() {
 	log.Println("Stopping daemon")
-	d.virtualCamera.Shutdown()
 	d.cancel()
+	d.recordingHandler.ShutdownReplay()
+	d.virtualCamera.Shutdown()
 
 	if d.listener != nil {
 		_ = d.listener.Close()
@@ -231,6 +232,27 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	case "movie-current-window":
 		err = d.recordingHandler.MovieCurrentWindow(ctx, delay, opts)
 
+	case "replay-start":
+		seconds := 60
+		if value, exists := req.Options["seconds"]; exists {
+			n, ok := value.(float64)
+			if !ok || (n != 30 && n != 60 && n != 120) {
+				return protocol.Response{Success: false, Message: "replay duration must be 30, 60 or 120 seconds"}
+			}
+			seconds = int(n)
+		}
+		if geometry != "" || camera.enabled {
+			err = errors.New("replay supports monitor capture without a webcam")
+		} else {
+			err = d.recordingHandler.StartReplay(ctx, output, useCurrentScreen, seconds, audio)
+		}
+
+	case "replay-save":
+		file, err = d.recordingHandler.SaveReplay(ctx)
+
+	case "replay-stop":
+		err = d.recordingHandler.StopReplay(ctx)
+
 	case "stop-recording":
 		err = d.recordingHandler.StopRecording(ctx)
 
@@ -279,6 +301,9 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 				}
 				if countdown, ok := iconsMap["Countdown"].(string); ok {
 					icons.Countdown = countdown
+				}
+				if replay, ok := iconsMap["Replay"].(string); ok {
+					icons.Replay = replay
 				}
 				if live, ok := iconsMap["Live"].(string); ok {
 					icons.Live = live

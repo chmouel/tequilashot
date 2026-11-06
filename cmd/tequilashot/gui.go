@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chmouel/tequilashot/internal/config"
+	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/internal/gui"
 	"github.com/chmouel/tequilashot/pkg/protocol"
 
@@ -24,7 +25,11 @@ func guiAction(_ context.Context, _ *cli.Command) error {
 		SaveLocation: cfg.SaveLocation,
 		EnsureDaemon: func() error { return ensureDaemonRunning(cfg) },
 		Send: func(req protocol.Request) (*protocol.Response, error) {
-			return sendRequestTimeout(cfg.SocketPath, req, 10*time.Second)
+			timeout := 10 * time.Second
+			if req.Action == "replay-save" || req.Action == "replay-stop" {
+				timeout = external.ReplayExportTimeout + 5*time.Second
+			}
+			return sendRequestTimeout(cfg.SocketPath, req, timeout)
 		},
 		// Interactive selection waits on the user for as long as needed.
 		SendStart: func(req protocol.Request) (*protocol.Response, error) {

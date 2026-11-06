@@ -22,7 +22,7 @@ closes. Every capture is also a command, for key bindings and Waybar.
   <img src=".github/screenshots/dialogue-window.png" alt="Window list with a preview of each open window" width="45%">
 </p>
 
-Pick Screenshot, Video or Camera, then a source:
+Pick Screenshot, Video, Replay or Camera, then a source:
 
 - Monitor: live thumbnails of each output.
 - Window: open windows with a preview, application and size.
@@ -78,6 +78,57 @@ Camera mode publishes the chosen monitor, window or region as a webcam that
 Google Meet, Chrome and other call applications can select, with your webcam
 in a round bubble on top. Press Go live to start it, and run `tequilashot`
 again to stop it. See [Virtual camera](#virtual-camera) for the one-off setup.
+
+### Instant replay
+
+Replay keeps the previous 30, 60 or 120 seconds of a selected monitor in RAM,
+with optional desktop sound and microphone. The default is 60 seconds. Press
+Start buffering, then reopen `tequilashot` to show Save replay and Stop
+buffering. Closing the dialogue leaves buffering active.
+
+Save replay writes an MP4 and keeps buffering. The result page offers the
+usual playback and file actions; Back to replay returns to the controls.
+Saving before the buffer is full keeps the footage available so far. Stop
+buffering discards the unsaved buffer and keeps clips already saved.
+
+Replay needs a GPU Screen Recorder build with `-ipc` support. Restart an
+existing Tequilashot daemon after upgrading. Replay captures monitors only,
+without a webcam overlay. Stop buffering before starting a normal recording;
+replay cannot be paused. Buffering does not resume automatically after the
+daemon restarts.
+
+Replay targets 20 Mbps H.264, which comes to about 2.5 MB per second of
+footage. The bitrate is fixed, so these figures hold whatever the resolution
+or refresh rate of the monitor.
+
+| Buffer | Buffered footage |
+| --- | --- |
+| 30 seconds | about 75 MB |
+| 60 seconds (default) | about 150 MB |
+| 120 seconds | about 300 MB |
+
+The buffer stays in memory and nothing is written to disk until you save. The
+recorder keeps some extra memory of its own for encoding, so allow a little
+more than the figures above. Saving writes the clip to the capture folder and
+prints its path. Expect a larger clip to take longer, and note that buffering
+carries on whilst it runs. You get whatever the buffer held at the moment you
+saved, so save after the moment you wanted to keep.
+
+```sh
+# Buffer the focused monitor, including desktop sound
+tequilashot replay-start --current-screen --seconds 60 --audio
+# Save the buffer and print the completed clip's path
+tequilashot replay-save
+# Discard the remaining buffer
+tequilashot replay-stop
+```
+
+Without `--current-screen`, the monitor picker opens. `--mic` and
+`--mic-device <id>` work as they do for recordings. `--seconds` accepts 30,
+60 or 120. Clips use the configured capture folder and its retention rules.
+If a save cannot be confirmed, buffering continues; stop and restart replay
+before trying another save. Completed exports are recovered when buffering
+stops.
 
 ### After the capture
 
@@ -149,6 +200,11 @@ command-line tools only.
 Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
 [aichat](https://github.com/sigoden/aichat) (AI-generated file names).
+
+Tequilashot leaves the encoder to GPU Screen Recorder. It encodes on the GPU
+and does not fall back to the CPU, so hardware H.264 encoding has to work on
+the card the recorder selects. If a capture fails as soon as it starts, check
+that before anything else.
 
 The [virtual camera](#virtual-camera) also needs
 [wf-recorder](https://github.com/ammen99/wf-recorder), plus either the
@@ -323,6 +379,37 @@ fix its `ExecStart` path.
 
 While the virtual camera is live, the status uses the `live` class and the
 icon set by `--icon-live`.
+
+For replay controls, use a separate module with click to save and right-click
+to stop. Start buffering from the dialogue or a key binding first:
+
+```json
+"custom/replay": {
+  "exec": "tequilashot waybar-status --follow --no-idle-output",
+  "on-click": "tequilashot replay-save",
+  "on-click-right": "tequilashot replay-stop",
+  "return-type": "json"
+}
+```
+
+Replay uses the `replay` class and `--icon-replay`. The tooltip shows the
+monitor and buffer duration. For Sway, bind a save with
+`bindsym $mod+F9 exec tequilashot replay-save`; for Hyprland Lua, use
+`hl.bind("SUPER + F9", hl.dsp.exec_cmd("tequilashot replay-save"))`.
+
+## Shell completion
+
+Generate completion from the installed command so it includes the available
+commands and flags:
+
+```sh
+# Bash or Zsh: add the matching line to your shell configuration
+source <(tequilashot completion bash)
+source <(tequilashot completion zsh)
+
+# Fish
+tequilashot completion fish > ~/.config/fish/completions/tequilashot.fish
+```
 
 ## Sway key bindings
 

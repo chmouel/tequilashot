@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
+	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -116,6 +117,22 @@ func (m MediaInfo) Caption() string {
 	}
 	parts = append(parts, FormatSize(m.Size))
 	return strings.Join(parts, " · ")
+}
+
+// probeSavedVideo describes a saved video, falling back to its size when ffprobe fails.
+func probeSavedVideo(file string) MediaInfo {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	info, err := ProbeMedia(ctx, file)
+	if err != nil {
+		// The file is saved; show the card with whatever details are known.
+		log.Printf("inspect %s: %v", file, err)
+		info = MediaInfo{}
+		if st, serr := os.Stat(file); serr == nil {
+			info.Size = st.Size()
+		}
+	}
+	return info
 }
 
 // ProbeMedia inspects file with ffprobe and os.Stat.

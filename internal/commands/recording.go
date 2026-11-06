@@ -27,8 +27,10 @@ type RecordingHandler struct {
 	cfg   *config.Config
 	state *state.State
 
-	mu      sync.Mutex
-	current *recordSession
+	mu       sync.Mutex
+	current  *recordSession
+	starting bool
+	replay   *replaySession
 }
 
 // recordSession is one recorder run; stopping and the cache file belong to it.
@@ -154,7 +156,13 @@ func WithQuietFinish(ctx context.Context) context.Context {
 
 // MovieSelection records a video of a selected region.
 func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, opts RecordOptions) error {
-	opts, err := h.resolveOptions(ctx, opts)
+	ctx, release, err := h.reserveStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	opts, err = h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -175,7 +183,13 @@ func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, opts R
 
 // MovieScreen records a video of the screen (or current screen if useCurrentScreen is true).
 func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurrentScreen bool, cropTop int, opts RecordOptions) error {
-	opts, err := h.resolveOptions(ctx, opts)
+	ctx, release, err := h.reserveStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	opts, err = h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -190,7 +204,13 @@ func (h *RecordingHandler) MovieScreen(ctx context.Context, delay int, useCurren
 
 // MovieOutput records a video of the named output, optionally skipping cropTop pixels at its top.
 func (h *RecordingHandler) MovieOutput(ctx context.Context, delay int, output string, cropTop int, opts RecordOptions) error {
-	opts, err := h.resolveOptions(ctx, opts)
+	ctx, release, err := h.reserveStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	opts, err = h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -224,7 +244,13 @@ func (h *RecordingHandler) MovieGeometry(ctx context.Context, delay int, geometr
 		return fmt.Errorf("invalid geometry %q, expected \"X,Y WxH\"", geometry)
 	}
 
-	opts, err := h.resolveOptions(ctx, opts)
+	ctx, release, err := h.reserveStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	opts, err = h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -240,7 +266,13 @@ func (h *RecordingHandler) MovieGeometry(ctx context.Context, delay int, geometr
 
 // MovieCurrentWindow records a video of the currently focused window.
 func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, opts RecordOptions) error {
-	opts, err := h.resolveOptions(ctx, opts)
+	ctx, release, err := h.reserveStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	opts, err = h.resolveOptions(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -292,6 +324,12 @@ func showBubble(ctx context.Context, geometry, output string, camera external.Ca
 }
 
 func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, opts RecordOptions) error {
+	h.mu.Lock()
+	replaying := h.replay != nil
+	h.mu.Unlock()
+	if replaying {
+		return fmt.Errorf("please stop replay buffering before recording")
+	}
 	bubble, err := showBubble(ctx, geometry, output, opts.Camera)
 	if err != nil {
 		return err
@@ -415,14 +453,25 @@ func (t *tailBuffer) String() string {
 
 // StopRecording stops the current recording and waits for the MP4 to be finalised.
 func (h *RecordingHandler) StopRecording(ctx context.Context) error {
+	h.mu.Lock()
+	if h.replay != nil {
+		h.mu.Unlock()
+		return fmt.Errorf("replay is active; please use replay-stop")
+	}
 	pid := h.state.GetRecordingPID()
 	if pid == 0 {
+		if _, err := os.Stat(h.cfg.CacheFile); err != nil {
+			h.mu.Unlock()
+			return fmt.Errorf("no recording in progress")
+		}
 		// The daemon may have restarted since the recording began.
 		out, err := exec.CommandContext(ctx, "pgrep", "-n", "-f", "^gpu-screen-recorder ").Output() //nolint:gosec
 		if err != nil {
+			h.mu.Unlock()
 			return fmt.Errorf("no recording in progress")
 		}
 		if _, err := fmt.Sscanf(string(out), "%d", &pid); err != nil {
+			h.mu.Unlock()
 			return fmt.Errorf("failed to parse recorder PID: %w", err)
 		}
 	}
@@ -430,20 +479,20 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 	// Read before signalling: the monitor goroutine clears it once the recorder exits.
 	quiet := h.state.QuietFinish()
 
-	h.mu.Lock()
 	var sess *recordSession
 	if h.current != nil && h.current.pid == pid {
 		sess = h.current
 		sess.stopping.Store(true)
 	}
-	h.mu.Unlock()
 
 	if err := syscall.Kill(pid, syscall.SIGINT); err != nil {
 		if sess != nil {
 			sess.stopping.Store(false)
 		}
+		h.mu.Unlock()
 		return fmt.Errorf("failed to stop recording: %w", err)
 	}
+	h.mu.Unlock()
 	_ = notify.Send(2000, h.cfg.ScreenshotIcon, "Recording finished, saving")
 
 	if err := waitForExit(pid, 30*time.Second); err != nil {

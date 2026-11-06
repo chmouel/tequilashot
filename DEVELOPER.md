@@ -40,7 +40,8 @@ image. Run `make optimize` afterwards to compress the PNG files with
 
 To look at one staged page by hand, build the demo binary and set
 `TEQUILASHOT_DEMO` to a page name (`monitor`, `camera-circle`, `window`,
-`result`, `screenshot`, `screenshot-result` or `about`) and
+`result`, `screenshot`, `screenshot-result`, `replay`, `replay-active`,
+`replay-result` or `about`) and
 `TEQUILASHOT_DEMO_DIR` to a directory holding the staged assets that
 `hack/screenshots.py` writes.
 
@@ -95,22 +96,34 @@ printf '{"command":"execute","action":"waybar-status"}\n' |
 | `pause-recording` | Pauses the current recording, or resumes it when paused. |
 | `stop-recording` | Stops the current recording. |
 | `toggle-record` | Stops the current recording, or starts `start_action` (default `movie-selection`). |
+| `replay-start` | Buffers `output`, or a monitor picked interactively; `use_current_screen` selects the focused monitor. |
+| `replay-save` | Saves the available replay buffer, returns the completed clip in `file`, and continues buffering. |
+| `replay-stop` | Stops buffering and discards the unsaved buffer. |
 | `waybar-status` | Returns the Waybar status as a JSON string in `message`. |
 
 Recording actions reply once the recorder is running, not when the recording
 ends. Watch `state.recording` with `waybar-status` to learn when it stops.
+
+Replay starts reply once the recorder's IPC socket is available and the
+recorder has passed its startup check. Replay and
+normal recording share one session slot. Replay saves and stops are serialised,
+with a 30-second deadline. Clients should allow five additional seconds for
+the daemon to report a timeout. A lost save acknowledgement blocks further
+saves until replay is stopped and restarted, preventing a late export from
+being overwritten. Stopping recovers completed exports left in staging.
 
 ### Options
 
 | Option | Type | Used by |
 | --- | --- | --- |
 | `delay` | number (seconds) | Captures and recordings |
-| `output` | string, an output name | `screenshot`, `movie-screen` |
+| `output` | string, an output name | `screenshot`, `movie-screen`, `replay-start` |
 | `geometry` | string, `"X,Y WxH"` | `screenshot`, `movie-geometry` |
-| `use_current_screen` | boolean | `current-screen-clipboard`, `movie-screen`, `toggle-record` |
+| `use_current_screen` | boolean | `current-screen-clipboard`, `movie-screen`, `toggle-record`, `replay-start` |
 | `crop_top` | number (pixels) | `movie-screen`, `toggle-record` |
-| `audio`, `mic` | boolean | Recordings |
-| `mic_device` | string, a gpu-screen-recorder audio device id | Recordings |
+| `seconds` | number; 30, 60 or 120, default 60 | `replay-start` |
+| `audio`, `mic` | boolean | Recordings and replay |
+| `mic_device` | string, a gpu-screen-recorder audio device id | Recordings and replay |
 | `camera` | boolean, enables the `camera_*` options | Recordings |
 | `camera_device` | string, `/dev/videoN` | Recordings |
 | `camera_position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | Recordings |
@@ -119,7 +132,7 @@ ends. Watch `state.recording` with `waybar-status` to learn when it stops.
 | `camera_mirror` | boolean | Recordings |
 | `quiet_finish` | boolean; the finish notification omits its file actions because the client shows the result | Recordings |
 | `start_action` | string, a recording action | `toggle-record` |
-| `icons` | object with `Idle`, `Recording`, `Paused` and `Countdown` strings | `waybar-status` |
+| `icons` | object with `Idle`, `Recording`, `Paused`, `Countdown`, `Live` and `Replay` strings | `waybar-status` |
 
 Options of the wrong type are rejected. Camera values are validated when the
 recording starts.
@@ -136,5 +149,8 @@ recording starts.
 ```
 
 On failure, `success` is `false` and `message` explains why. `file` is set only
-by `screenshot`, and `state.recording_file` names the file of the current
-recording.
+by `screenshot` and `replay-save`, and `state.recording_file` names the file of
+the current recording. Active replay adds `state.replay: true`,
+`state.replay_output` and `state.replay_seconds`; it does not set
+`state.recording` or `state.recording_file`. Replay fields are omitted when
+inactive.

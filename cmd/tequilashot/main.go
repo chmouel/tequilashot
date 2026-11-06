@@ -23,8 +23,9 @@ import (
 
 func main() {
 	cmd := &cli.Command{
-		Name:  "tequilashot",
-		Usage: "Wayland screenshot and screen recording utility for Sway and Hyprland; without a command, opens the capture dialogue",
+		Name:                  "tequilashot",
+		EnableShellCompletion: true,
+		Usage:                 "Wayland screenshot and screen recording utility for Sway and Hyprland; without a command, opens the capture dialogue",
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.Args().Present() {
 				return fmt.Errorf("unknown command %q", c.Args().First())
@@ -43,6 +44,9 @@ func main() {
 			movieSelectionCommand(),
 			movieScreenCommand(),
 			movieCurrentWindowCommand(),
+			replayStartCommand(),
+			replayControlCommand("replay-save", "Save the buffered replay whilst buffering continues"),
+			replayControlCommand("replay-stop", "Stop buffering and discard the unsaved replay"),
 			stopRecordingCommand(),
 			pauseRecordingCommand(),
 			toggleRecordCommand(),
@@ -99,6 +103,11 @@ func waybarStatusCommand() *cli.Command {
 				Name:  "icon-recording",
 				Usage: "Icon for recording state",
 				Value: "󰑊",
+			},
+			&cli.StringFlag{
+				Name:  "icon-replay",
+				Usage: "Icon whilst replay is buffering",
+				Value: "↶",
 			},
 			&cli.StringFlag{
 				Name:  "icon-paused",
@@ -744,6 +753,7 @@ func handleWaybarStatus(cfg *config.Config, follow, noIdleOutput bool, c *cli.Co
 		Paused:    c.String("icon-paused"),
 		Countdown: c.String("icon-countdown"),
 		Live:      c.String("icon-live"),
+		Replay:    c.String("icon-replay"),
 	}
 	if follow {
 		return followWaybarStatus(cfg, icons, noIdleOutput)
