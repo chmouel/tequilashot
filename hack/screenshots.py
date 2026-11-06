@@ -80,6 +80,11 @@ GRAPHITE = (37, 42, 48)
 PETROL = (23, 107, 104)
 PALE_TEAL = (141, 213, 203)
 BACKDROP = [(0.0, GRAPHITE), (0.55, (31, 62, 64)), (1.0, PETROL)]
+# Tequila sunrise, taken from the brand marks in assets/.
+AGAVE_DARK = (48, 42, 36)
+AMBER = (255, 179, 44)
+CREAM = (255, 243, 214)
+SUNRISE = [(0.0, AGAVE_DARK), (0.45, (110, 52, 30)), (0.8, (196, 82, 28)), (1.0, (232, 128, 36))]
 
 
 def mock_window(w, h, kind, rnd):
@@ -290,6 +295,10 @@ def backdrop(w, h, seed):
     return blobs(gradient(w, h, BACKDROP), [PALE_TEAL, (72, 151, 145), (51, 91, 94)], seed).convert("RGBA")
 
 
+def sunrise_backdrop(w, h, seed):
+    return blobs(gradient(w, h, SUNRISE), [AMBER, (240, 110, 40), (150, 50, 40)], seed).convert("RGBA")
+
+
 def hero(shots):
     """Wide camera-enabled setup on top; window picker and both result cards below."""
     top = rounded(shots["monitor"])
@@ -317,20 +326,41 @@ def logo(size):
 
 
 def social(shots):
-    w, h = 1200, 630
-    canvas = Image.new("RGBA", (w, h), "#191A1D")
+    w, h = 1280, 640
+    canvas = sunrise_backdrop(w, h, 5)
     d = ImageDraw.Draw(canvas)
-    left = 56
-    canvas.alpha_composite(logo(148), (left - 12, 64))
-    d.text((left, 236), "tequilashot", font=font(68, "SemiBold"), fill="#FFF3D6")
-    d.multiline_text((left + 2, 338), "Screenshots and recordings\nfor Sway and Hyprland.",
-                     font=font(27, "Medium"), fill="#D5D1C9", spacing=10)
-    d.text((left + 2, 550), "github.com/chmouel/tequilashot", font=font(20, "Medium"), fill="#FFB32C")
+    left, right_edge = 72, 0
 
+    def text(xy, value, fnt, **kw):
+        nonlocal right_edge
+        box = d.multiline_textbbox(xy, value, font=fnt, **{k: v for k, v in kw.items() if k == "spacing"})
+        right_edge = max(right_edge, box[2])
+        d.multiline_text(xy, value, font=fnt, **kw)
+        return box
+
+    canvas.alpha_composite(logo(88), (left, 60))
+    text((left, 168), "tequilashot", font(68, "Bold"), fill=CREAM)
+    text((left + 2, 260), "Screenshots and GPU-accelerated\nrecordings for Sway,\nHyprland and Niri",
+         font(28, "Medium"), fill=CREAM + (235,), spacing=8)
+
+    chip_font = font(21, "SemiBold")
+    x, y = left + 2, 400
+    for row in (("Sway", "Hyprland", "Niri", "GTK 4"), ("Instant replay", "Webcam overlay"), ("GPU Screen Recorder",)):
+        for chip in row:
+            tw = d.textlength(chip, font=chip_font)
+            d.rounded_rectangle((x, y, x + tw + 30, y + 42), radius=21,
+                                fill=(48, 32, 24, 215), outline=AMBER + (130,), width=1)
+            d.text((x + 15, y + 9), chip, font=chip_font, fill=CREAM)
+            right_edge = max(right_edge, x + tw + 30)
+            x += tw + 30 + 10
+        x, y = left + 2, y + 52
+
+    # Fit the dialogue into whatever the text leaves free on the right.
     win = rounded(shots["monitor"])
-    scale = min(466 / win.height, 600 / win.width)
-    win = win.resize((round(win.width * scale), round(win.height * scale)), Image.Resampling.LANCZOS)
-    paste_with_shadow(canvas, win, (w - win.width - 44, (h - win.height) // 2), alpha=85)
+    room = w - right_edge - 48 - 48
+    scale = min((h - 80) / win.height, room / win.width)
+    win = win.resize((int(win.width * scale), int(win.height * scale)), Image.LANCZOS)
+    paste_with_shadow(canvas, win, (w - win.width - 48, (h - win.height) // 2))
     return canvas.convert("RGB")
 
 
