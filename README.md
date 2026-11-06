@@ -5,15 +5,23 @@
   </picture>
 </h1>
 
-<p align="center">Screenshots and screen recordings for Sway and Hyprland, from a small GTK dialogue or the command line.</p>
+<p align="center">Blazing-fast screenshots, GPU-accelerated screen recordings and instant replay for Sway and Hyprland, from a small GTK dialogue or the command line.</p>
 
 <p align="center">
-  <img src=".github/screenshots/social-preview.png" alt="Tequilashot: screenshots and recordings for Sway and Hyprland, with the capture dialogue">
+  <img src=".github/screenshots/social-preview.png" alt="Tequilashot: screenshots, GPU-accelerated recordings and instant replay, with the capture dialogue">
 </p>
 
 Run `tequilashot` with no arguments to open the capture dialogue. It starts
 the daemon if needed and remembers your last settings. Enter captures, Escape
-closes. Every capture is also a command, for key bindings and Waybar.
+closes.
+
+- **GPU-accelerated recording.** Video is encoded in hardware on your
+  graphics card by GPU Screen Recorder, so the CPU stays free and recordings
+  stay smooth, even at high resolutions and frame rates.
+- **Instant replay.** Keep the last 30, 60 or 120 seconds of a monitor in
+  memory and save the moment after it has happened.
+- **Quick to hand.** A resident daemon keeps the dialogue a keystroke away,
+  and every capture is a single command for key bindings and Waybar.
 
 ## The capture dialogue
 
