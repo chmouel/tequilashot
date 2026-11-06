@@ -71,6 +71,7 @@ type app struct {
 	toasts       *adw.ToastOverlay
 	pages        *gtk.Stack
 	res          resultView
+	trim         trimView
 	settings     Settings
 	settingsPath string
 	startButton  *gtk.Button
@@ -243,7 +244,7 @@ func (a *app) activate() {
 		}
 		return
 	}
-	if a.res.editing {
+	if a.res.editing || a.pages.VisibleChildName() == pageTrim {
 		a.win.Present()
 		return
 	}
@@ -340,8 +341,12 @@ func (a *app) build() {
 		a.closing = true
 		a.stopThumbTimer()
 		a.stopPreview()
-		// Wait for the camera off the main loop, then quit.
+		trimDone := a.trim.done
+		a.stopTrim()
 		go func() {
+			if trimDone != nil {
+				<-trimDone
+			}
 			if !a.gate.Wait(previewRelease) {
 				log.Print("camera preview did not exit in time")
 			}
@@ -354,9 +359,22 @@ func (a *app) build() {
 	key.SetPropagationPhase(gtk.PhaseCapture)
 	key.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
 		switch keyval {
+		case gdk.KEY_space:
+			if !a.aboutOpen && a.pages.VisibleChildName() == pageTrim && a.trim.export == nil {
+				if (a.trim.start.StateFlags()|a.trim.end.StateFlags())&gtk.StateFlagFocusWithin == 0 {
+					a.toggleTrimPlayback()
+					return true
+				}
+			}
 		case gdk.KEY_Escape:
 			if a.aboutOpen {
 				return false
+			}
+			if a.pages.VisibleChildName() == pageTrim {
+				if a.trim.export == nil {
+					a.leaveTrim()
+				}
+				return true
 			}
 			if a.res.editing {
 				return true
@@ -424,6 +442,7 @@ func (a *app) build() {
 	setup.Append(a.cameraRevealer)
 	a.pages.AddNamed(setup, pageSetup)
 	a.pages.AddNamed(a.buildResult(), pageResult)
+	a.pages.AddNamed(a.buildTrim(), pageTrim)
 	a.pages.AddNamed(a.buildReplayControls(), pageReplay)
 	a.pages.SetVisibleChildName(pageSetup)
 	a.pages.NotifyProperty("visible-child-name", a.syncPreview)

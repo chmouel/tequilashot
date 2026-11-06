@@ -102,7 +102,7 @@ func init() {
 				if row := a.winList.RowAtIndex(1); row != nil {
 					a.winList.SelectRow(row)
 				}
-			case "result", "replay-result":
+			case "result", "replay-result", "trim":
 				clip := filepath.Join(dir, demoClip)
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				info, err := ProbeMedia(ctx, clip)
@@ -114,6 +114,12 @@ func init() {
 						mode = ModeReplay
 					}
 					a.showResult(clip, info, mode)
+					if page == "trim" {
+						a.openTrim()
+						a.trim.selection.start = info.Duration / 4
+						a.trim.selection.end = info.Duration * 3 / 4
+						a.updateTrim()
+					}
 				}
 			case "screenshot-result":
 				file := filepath.Join(dir, "screenshot.png")

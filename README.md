@@ -156,6 +156,17 @@ add Copy image and Edit, which opens [Satty](https://github.com/gabm/satty)
 and reloads the preview on save. New recording, New screenshot or Escape goes
 back to the setup page.
 
+Recordings and saved replays also offer Trim. Drag the two timeline handles
+to select a section, or enter precise start and end times in seconds. Keep
+selection saves that section; Remove selection cuts it out and joins the
+remaining footage. Preview edit plays the result before saving. Click the
+timeline to seek, or focus it and use Left and Right (hold Shift for larger
+steps). Space plays or pauses; Reset restores the full selection and Back or
+Escape returns to the saved recording.
+
+Save copy creates a uniquely named `-trimmed.mp4` beside the original, which
+is kept. Saving shows progress and can be cancelled.
+
 ## Install
 
 You can install a package or build from source.
@@ -206,7 +217,7 @@ command-line tools only.
 | [slurp](https://github.com/emersion/slurp) | Selecting a region |
 | [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) | Recording video, audio and webcam input |
 | [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Clipboard commands |
-| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera and recording details |
+| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera, recording details and video trimming |
 
 Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
