@@ -16,7 +16,7 @@ func findRecorderPID(ctx context.Context, procRoot, output string) (int, error) 
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	entries, err := os.ReadDir(procRoot)
+	entries, err := os.ReadDir(procRoot) //nolint:gosec
 	if err != nil {
 		return 0, err
 	}
