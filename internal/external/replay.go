@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 // ReplayExportTimeout includes time spent waiting for another replay operation.
@@ -26,32 +28,39 @@ func ValidReplaySeconds(seconds int) bool {
 	return seconds == 30 || seconds == 60 || seconds == 120
 }
 
-func replayArgs(output, directory, socket string, seconds, width, height int, audio AudioSources) ([]string, error) {
+func replayArgs(p prefs.Prefs, output, directory, socket string, seconds, width, height int, audio AudioSources) ([]string, error) {
 	if !ValidReplaySeconds(seconds) {
 		return nil, errors.New("replay duration must be 30, 60 or 120 seconds")
 	}
-	args, err := gsrArgs("", output, directory, width, height, audio, CameraOverlay{})
+	args, err := gsrArgs(p, "", output, directory, width, height, audio, CameraOverlay{})
 	if err != nil {
 		return nil, err
 	}
-	return append(args, "-r", strconv.Itoa(seconds), "-replay-storage", "ram",
-		"-restart-replay-on-save", "no", "-k", "h264", "-bm", "cbr", "-q", "20000", "-ipc", socket), nil
+	extra, err := prefs.RecorderArgs(p.ReplayArgs, true)
+	if err != nil {
+		return nil, fmt.Errorf("extra replay arguments: %w", err)
+	}
+	args = append(args, "-r", strconv.Itoa(seconds), "-replay-storage", "ram",
+		"-restart-replay-on-save", "no", "-k", "h264", "-bm", "cbr", "-q", strconv.Itoa(p.ReplayBitrate), "-ipc", socket)
+	return append(args, extra...), nil
 }
 
 // StartReplay leaves readiness checks and process reaping to the caller.
 func StartReplay(ctx context.Context, output, directory, socket string, seconds int, audio AudioSources, stderr io.Writer) (*exec.Cmd, error) {
 	helpCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	help, _ := exec.CommandContext(helpCtx, "gpu-screen-recorder", "--help").CombinedOutput()
+	p := prefs.Current()
+	bin := p.Program("gpu-screen-recorder")
+	help, _ := exec.CommandContext(helpCtx, bin, "--help").CombinedOutput() //nolint:gosec
 	if !strings.Contains(string(help), "-ipc ") {
 		return nil, errors.New("instant replay requires gpu-screen-recorder with -ipc support; please upgrade it")
 	}
-	w, h := gsrOutputSize(ctx, output)
-	args, err := replayArgs(output, directory, socket, seconds, w, h, audio)
+	w, h := gsrOutputSize(ctx, bin, output)
+	args, err := replayArgs(p, output, directory, socket, seconds, w, h, audio)
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "gpu-screen-recorder", args...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGINT}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = io.MultiWriter(os.Stderr, stderr)

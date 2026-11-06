@@ -12,6 +12,7 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
@@ -57,9 +58,41 @@ func (a *app) showAbout() {
 	dlg.Present(a.win)
 }
 
+// modalOpen reports whether the about or preferences dialogue covers the
+// window.
+func (a *app) modalOpen() bool {
+	return a.aboutOpen || a.prefsOpen
+}
+
 // sponsor opens the sponsorship page in the browser.
 func (a *app) sponsor() {
 	detach("xdg-open", aboutSponsorURL)
+}
+
+// primaryMenu builds the header bar's main menu and registers its actions.
+func (a *app) primaryMenu() *gtk.MenuButton {
+	for name, activate := range map[string]func(){"open-video": a.chooseTrimVideo, "preferences": a.showPreferences, "about": a.showAbout} {
+		action := gio.NewSimpleAction(name, nil)
+		action.ConnectActivate(func(*glib.Variant) {
+			if !a.modalOpen() {
+				activate()
+			}
+		})
+		a.gtkApp.AddAction(action)
+	}
+	a.gtkApp.SetAccelsForAction("app.preferences", []string{"<Control>comma"})
+	a.gtkApp.SetAccelsForAction("app.open-video", []string{"<Control>o"})
+
+	menu := gio.NewMenu()
+	menu.Append("_Open Video…", "app.open-video")
+	menu.Append("_Preferences", "app.preferences")
+	menu.Append("_About Tequilashot", "app.about")
+	b := gtk.NewMenuButton()
+	b.SetIconName("open-menu-symbolic")
+	b.SetTooltipText("Main Menu")
+	b.SetMenuModel(menu)
+	b.SetPrimary(true)
+	return b
 }
 
 // headerAction builds a flat, icon-only header bar button.

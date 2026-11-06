@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chmouel/tequilashot/internal/prefs"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -128,7 +130,7 @@ func trimFilters(segments []trimSegment, audio bool) string {
 }
 
 func trimHasAudio(ctx context.Context, file string) (bool, error) {
-	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", "a:0", //nolint:gosec
+	out, err := exec.CommandContext(ctx, prefs.Bin("ffprobe"), "-v", "error", "-select_streams", "a:0", //nolint:gosec
 		"-show_entries", "stream=index", "-of", "json", file).Output()
 	if err != nil {
 		if ctx.Err() != nil {
@@ -186,7 +188,7 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 		args = append(args, "-map", "[audio]", "-c:a", "aac", "-b:a", "192k")
 	}
 	args = append(args, "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", tmp)
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, prefs.Bin("ffmpeg"), args...) //nolint:gosec
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	pipe, err := cmd.StdoutPipe()

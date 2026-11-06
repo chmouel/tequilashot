@@ -17,6 +17,7 @@ func TestScreenshotResponse(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "grim"), []byte("#!/bin/sh\nfor last; do :; done\nprintf png > \"$last\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	d := New(&config.Config{SaveLocation: dir}, false)
 	defer d.cancel()
@@ -99,6 +100,7 @@ func TestParseMicDevice(t *testing.T) {
 }
 
 func TestReplayRequests(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	d := New(&config.Config{SaveLocation: t.TempDir()}, false)
 	defer d.cancel()
 	for _, seconds := range []any{"60", true, nil, 60.5, 0.0, 86400.0} {

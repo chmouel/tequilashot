@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 type frameClock struct {
@@ -20,7 +22,7 @@ type frameClock struct {
 }
 
 func probeFrameClock(ctx context.Context, file string) (*frameClock, error) {
-	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "format=start_time:stream=time_base", "-of", "json", file).Output() //nolint:gosec
+	out, err := exec.CommandContext(ctx, prefs.Bin("ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries", "format=start_time:stream=time_base", "-of", "json", file).Output() //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("inspect frame timing: %w", err)
 	}
@@ -104,7 +106,7 @@ func loadFrameWindowLimit(ctx context.Context, file string, clock *frameClock, a
 	defer cancel()
 	start, end := max(0, at-time.Second), duration
 	interval := trimSeconds(start+clock.origin) + "%" + trimSeconds(end+clock.origin)
-	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-read_intervals", interval, "-show_frames", "-show_entries", "frame=best_effort_timestamp", "-of", "csv=p=0", file) //nolint:gosec
+	cmd := exec.CommandContext(ctx, prefs.Bin("ffprobe"), "-v", "error", "-select_streams", "v:0", "-read_intervals", interval, "-show_frames", "-show_entries", "frame=best_effort_timestamp", "-of", "csv=p=0", file) //nolint:gosec
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return frameWindow{}, err
@@ -161,7 +163,7 @@ func loadFrameWindowLimit(ctx context.Context, file string, clock *frameClock, a
 func extractTrimFrame(ctx context.Context, file string, at time.Duration) ([]byte, error) {
 	// Input seeking keeps the original timeline with copyts and start_at_zero
 	filter := "select='gte(t," + trimSeconds(at) + ")',scale=960:-2"
-	data, err := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-copyts", "-start_at_zero", "-ss", trimSeconds(max(0, at-time.Second)), "-i", file, "-vf", filter, "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "-").Output() //nolint:gosec
+	data, err := exec.CommandContext(ctx, prefs.Bin("ffmpeg"), "-v", "error", "-nostdin", "-copyts", "-start_at_zero", "-ss", trimSeconds(max(0, at-time.Second)), "-i", file, "-vf", filter, "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "-").Output() //nolint:gosec
 	if err != nil {
 		return nil, err
 	}

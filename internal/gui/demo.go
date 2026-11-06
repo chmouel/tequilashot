@@ -6,8 +6,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
 	"github.com/chmouel/tequilashot/internal/external"
@@ -98,6 +100,20 @@ func init() {
 				a.showReplay(&protocol.State{Replay: true, ReplayOutput: "DP-1", ReplaySeconds: 60})
 			case "about":
 				a.showAbout()
+			case "preferences", "preferences-recording", "preferences-screenshots", "preferences-advanced",
+				"preferences-encoding", "preferences-programs", "preferences-background":
+				d := a.openPreferences()
+				name, _ := strings.CutPrefix(page, "preferences-")
+				if sub := map[string]func() *adw.NavigationPage{
+					"encoding": d.encodingPage, "programs": d.programsPage, "background": d.backgroundPage,
+				}[name]; sub != nil {
+					d.dlg.SetVisiblePageName("advanced")
+					d.rerender()
+					d.dlg.PushSubpage(sub())
+					d.rerender()
+				} else if name != "" {
+					d.dlg.SetVisiblePageName(name)
+				}
 			case SourceWindow, "screenshot-window":
 				if row := a.winList.RowAtIndex(1); row != nil {
 					a.winList.SelectRow(row)

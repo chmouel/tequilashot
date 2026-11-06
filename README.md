@@ -97,12 +97,13 @@ person-segmentation model and will occasionally clip hair or hands. Nothing is
 downloaded behind your back, but the dialogue offers a Download button for the model. You need:
 
 - [ONNX Runtime](https://onnxruntime.ai/) as a shared library, found in the usual
-  system locations or through `TEQUILASHOT_ONNXRUNTIME_LIB`. The Go binding is
+  system locations, set in Preferences or through
+  `TEQUILASHOT_ONNXRUNTIME_LIB`. The Go binding is
   built for version 1.29.
 - The `u2net_human_seg.onnx` model (Apache-2.0, from the
   [rembg releases](https://github.com/danielgatis/rembg/releases/tag/v0.0.0)),
-  saved as `~/.local/share/tequilashot/u2net_human_seg.onnx` or named by
-  `TEQUILASHOT_SEGMENTATION_MODEL`.
+  saved as `~/.local/share/tequilashot/u2net_human_seg.onnx`, or wherever
+  Preferences or `TEQUILASHOT_SEGMENTATION_MODEL` say.
 
 If either is missing, or the segmentation fails, the round camera is hidden and
 an error is reported instead of showing your real background. A recording or
@@ -134,8 +135,9 @@ replay cannot be paused. Buffering does not resume automatically after the
 daemon restarts.
 
 Replay targets 20 Mbps H.264, which comes to about 2.5 MB per second of
-footage. The bitrate is fixed, so these figures hold whatever the resolution
-or refresh rate of the monitor.
+footage. These figures apply to that default bitrate; raising or lowering it
+in the Preferences dialogue changes the memory the buffer needs, in
+proportion. The monitor's resolution and refresh rate make no difference.
 
 | Buffer | Buffered footage |
 | --- | --- |
@@ -185,7 +187,8 @@ back to the setup page.
   <img src=".github/screenshots/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles" width="60%">
 </p>
 
-Open an existing local video with Open video, or drop one onto the idle window.
+Open an existing local video from Open Video in the main menu
+(<kbd>Ctrl</kbd>+<kbd>O</kbd>), or drop one onto the idle window.
 Recordings and saved replays also offer Trim. Drag the two timeline handles
 to select a section, or enter precise start and end times in seconds.
 
@@ -410,19 +413,63 @@ To check the picture locally, run
 
 ## Configuration
 
-The dialogue stores its settings at
-`$XDG_CONFIG_HOME/tequilashot/tequilashot.json`, or
-`~/.config/tequilashot/tequilashot.json` when `XDG_CONFIG_HOME` is unset.
+### Preferences
+
+Open Preferences from the main menu in the dialogue's header bar, or press
+<kbd>Ctrl</kbd>+<kbd>,</kbd>. The same menu opens an existing video for
+trimming and shows the about box. Switches and choices are saved as you change
+them; text fields are saved when you apply them, by pressing
+<kbd>Enter</kbd> or the apply button. Either way the new settings apply from
+the next capture, and a recording or replay already under way keeps the
+settings it started with.
+
+- General: the save folder, and whether old files in it are deleted.
+- Recording: frame rate, maximum width, quality, codec and mouse pointer for
+  recordings, and the instant replay bitrate.
+- Screenshots: the mouse pointer, the region selection colour and the aichat
+  model used to name clipboard selections.
+- Advanced: the encoder and extra gpu-screen-recorder options, the location of
+  each helper program, and the background removal model, its download mirror
+  and the ONNX Runtime library.
+
+Extra gpu-screen-recorder options are limited to those that cannot redirect
+the output or capture source: `-ac`, `-ab`, `-fm`, `-bm`, `-cr`, `-pixfmt`,
+`-tune`, `-keyint`, `-low-power`, `-fallback-cpu-encoding`, `-v`,
+`-gl-debug` and `-exclude-metadata`, each followed by its value. Instant
+replay accepts the same, save `-bm`, as it always records at a constant
+bitrate. A model mirror must use `https://`, and the download is still checked
+against the model's checksum.
+
+Preferences live in `$XDG_CONFIG_HOME/tequilashot/preferences.json`; the
+dialogue's own choices, such as the last source and countdown, stay in
+`tequilashot.json` beside it. Both default to `~/.config/tequilashot` when
+`XDG_CONFIG_HOME` is unset.
+
+### Deleting old files
 
 Captures go to `~/Downloads/Screenshots` by default. The daemon deletes files
 directly in that folder once they are older than three days, at start-up and
 then daily. Subfolders, hidden files and symlinks are kept, so move anything
-you want to keep, or set a dedicated folder.
+you want to keep, or set a dedicated folder. The period can be changed in
+Preferences.
+
+Choosing another save folder in Preferences switches the deletion off. To
+enable it for the new folder, switch on Delete Old Files and confirm; every
+file older than the chosen period in that folder will then be deleted,
+whether Tequilashot created it or not.
+
+### Environment variables
+
+Environment variables take precedence over the preferences, and the dialogue
+marks any setting they override. If the daemon runs as a systemd user unit, it
+is the unit's environment that counts.
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `TEQUILASHOT_SAVE_LOCATION` | `~/Downloads/Screenshots` | Screenshot and recording directory |
 | `TEQUILASHOT_AI_MODEL` | `gemini:gemini-2.5-flash-image` | Model used for AI-generated filenames |
+| `TEQUILASHOT_SEGMENTATION_MODEL` | `~/.local/share/tequilashot/u2net_human_seg.onnx` | Background removal model |
+| `TEQUILASHOT_ONNXRUNTIME_LIB` | system locations | ONNX Runtime shared library |
 | `TEQUILASHOT_WAYBAR_POLL_INTERVAL` | `1s` | Waybar status polling interval; values below `100ms` use `100ms` |
 
 The daemon starts on demand. To start it with your session, install

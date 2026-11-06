@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chmouel/tequilashot/internal/prefs"
+
 	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/internal/sway"
 	"github.com/chmouel/tequilashot/pkg/protocol"
@@ -166,9 +168,10 @@ type app struct {
 
 	busy    bool
 	started bool
-	// aboutOpen keeps Escape and Return from acting on the setup page whilst
-	// the about dialogue covers it.
+	// aboutOpen and prefsOpen keep Escape and Return from acting on the
+	// setup page whilst a dialogue covers it.
 	aboutOpen bool
+	prefsOpen bool
 
 	// mu guards pending and stopLatched, shared with the start goroutine.
 	mu          sync.Mutex
@@ -190,7 +193,7 @@ var (
 		return slices.DeleteFunc(wins, func(w sway.Window) bool { return w.Class == appID }), err
 	}
 	grabThumbnail = func(ctx context.Context, output string) ([]byte, error) {
-		return exec.CommandContext(ctx, "grim", "-o", output, "-s", "0.1", "-t", "jpeg", "-q", "70", "-").Output() //nolint:gosec
+		return exec.CommandContext(ctx, prefs.Bin("grim"), "-o", output, "-s", "0.1", "-t", "jpeg", "-q", "70", "-").Output() //nolint:gosec
 	}
 	grabWindowThumbnail = captureWindowPreview
 	// The demo build must not capture real desktop content
@@ -382,14 +385,14 @@ func (a *app) build() {
 		}
 		switch keyval {
 		case gdk.KEY_space:
-			if !a.aboutOpen && a.pages.VisibleChildName() == pageTrim && a.trim.export == nil {
+			if !a.modalOpen() && a.pages.VisibleChildName() == pageTrim && a.trim.export == nil {
 				if (a.trim.start.StateFlags()|a.trim.end.StateFlags())&gtk.StateFlagFocusWithin == 0 {
 					a.toggleTrimPlayback()
 					return true
 				}
 			}
 		case gdk.KEY_Escape:
-			if a.aboutOpen {
+			if a.modalOpen() {
 				return false
 			}
 			if a.pages.VisibleChildName() == pageTrim {
@@ -415,7 +418,7 @@ func (a *app) build() {
 			a.win.Close()
 			return true
 		case gdk.KEY_Return, gdk.KEY_KP_Enter:
-			if a.aboutOpen || !a.onSetupPage() {
+			if a.modalOpen() || !a.onSetupPage() {
 				return false
 			}
 			a.startCapture()
@@ -474,12 +477,9 @@ func (a *app) build() {
 
 	root := gtk.NewBox(gtk.OrientationVertical, 0)
 	header := adw.NewHeaderBar()
-	open := gtk.NewButtonWithLabel("Open video")
-	open.ConnectClicked(a.chooseTrimVideo)
-	header.PackStart(open)
 	a.win.AddController(a.trimDropTarget())
+	header.PackEnd(a.primaryMenu())
 	header.PackEnd(a.headerAction("emote-love-symbolic", "Sponsor Tequilashot", "er-sponsor", a.sponsor))
-	header.PackEnd(a.headerAction("help-about-symbolic", "About Tequilashot", "", a.showAbout))
 	root.Append(header)
 	root.Append(a.toasts)
 	a.win.SetContent(root)

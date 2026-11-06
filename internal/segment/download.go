@@ -6,12 +6,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 const (
@@ -21,6 +24,33 @@ const (
 	// ModelSize is the approximate download size in bytes.
 	ModelSize = 176_000_000
 )
+
+// maxModelBytes stops a download that grows beyond the expected model, so a
+// faulty mirror cannot fill the disc.
+var maxModelBytes int64 = 200_000_000
+
+// rejectInsecureRedirect keeps the download on HTTPS when a mirror redirects.
+func rejectInsecureRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("refusing to follow a redirect to %s", req.URL)
+	}
+	return nil
+}
+
+// downloadClient fetches the model; tests replace it to trust their own server.
+var downloadClient = &http.Client{CheckRedirect: rejectInsecureRedirect}
+
+// ModelURL returns the address the model is downloaded from: the preferred
+// mirror or the upstream release. The checksum is verified either way.
+func ModelURL() string {
+	if m := prefs.Current().ModelMirror; m != "" {
+		return m
+	}
+	return modelURL
+}
 
 // ModelInstalled reports whether the model file is in place.
 func ModelInstalled() bool {
@@ -39,17 +69,21 @@ func RuntimeAvailable() error {
 // the expected total. The file is verified before it replaces any existing
 // one, so an interrupted or corrupt download leaves nothing behind.
 func DownloadModel(ctx context.Context, progress func(done, total int64)) error {
-	dest := ModelPath()
+	return DownloadModelTo(ctx, ModelPath(), progress)
+}
+
+// DownloadModelTo is DownloadModel with an explicit destination.
+func DownloadModelTo(ctx context.Context, dest string, progress func(done, total int64)) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelURL(), http.NoBody)
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
@@ -80,6 +114,9 @@ func DownloadModel(ctx context.Context, progress func(done, total int64)) error 
 			}
 			hash.Write(buf[:n])
 			done += int64(n)
+			if done > maxModelBytes {
+				return fmt.Errorf("download failed: the file is larger than the expected model")
+			}
 			if progress != nil {
 				progress(done, total)
 			}

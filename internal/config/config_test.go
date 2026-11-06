@@ -12,6 +12,7 @@ func TestLoadUsesTequilashotIdentity(t *testing.T) {
 	home := t.TempDir()
 	saveLocation := filepath.Join(t.TempDir(), "captures")
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("TEQUILASHOT_SAVE_LOCATION", saveLocation)
 	t.Setenv("TEQUILASHOT_AI_MODEL", "test-model")
 	t.Setenv("TEQUILASHOT_WAYBAR_POLL_INTERVAL", "250ms")
@@ -21,7 +22,7 @@ func TestLoadUsesTequilashotIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.SaveLocation != saveLocation {
+	if cfg.SaveDir() != saveLocation {
 		t.Errorf("SaveLocation = %q, want %q", cfg.SaveLocation, saveLocation)
 	}
 	if cfg.CacheFile != filepath.Join(home, ".cache", ".tequilashot-recording") {
@@ -30,8 +31,8 @@ func TestLoadUsesTequilashotIdentity(t *testing.T) {
 	if cfg.SocketPath != fmt.Sprintf("/run/user/%d/tequilashot.sock", os.Getuid()) {
 		t.Errorf("SocketPath = %q", cfg.SocketPath)
 	}
-	if cfg.AIModelImage != "test-model" {
-		t.Errorf("AIModelImage = %q, want test-model", cfg.AIModelImage)
+	if cfg.AIModel() != "test-model" {
+		t.Errorf("AIModelImage = %q, want test-model", cfg.AIModel())
 	}
 	if cfg.WaybarPollInterval != 250*time.Millisecond {
 		t.Errorf("WaybarPollInterval = %s, want 250ms", cfg.WaybarPollInterval)

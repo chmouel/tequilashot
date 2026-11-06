@@ -37,6 +37,15 @@ captures and recordings, `internal/external` wraps grim, slurp,
 gpu-screen-recorder, FFmpeg and the other helpers, `internal/gui` is the
 dialogue and round camera, and `pkg/protocol` defines the socket messages.
 
+`internal/prefs` holds the preferences edited in the Preferences dialogue. It
+is pure Go so the `nogui` build keeps it. The dialogue saves
+`preferences.json` and the daemon reloads it before every command and
+clean-up pass, save for `waybar-status`, which answers from the settings
+already in force so the bar need not wait on the file. Argument builders
+should read `prefs.Current()` once per operation and keep that snapshot for
+its lifetime. Run helper programs through `prefs.Bin(name)` so a configured
+location is honoured.
+
 ## Screenshots
 
 `make screenshots` rebuilds the dialogue and social-preview images in
@@ -54,7 +63,9 @@ image. Run `make optimize` afterwards to compress the PNG files with
 To look at one staged page by hand, build the demo binary and set
 `TEQUILASHOT_DEMO` to a page name (`monitor`, `camera-circle`, `window`,
 `result`, `screenshot`, `screenshot-result`, `replay`, `replay-active`,
-`replay-result`, `trim` or `about`) and
+`replay-result`, `trim`, `about`, `preferences` or `preferences-<page>`,
+where the page is `recording`, `screenshots`, `advanced`, `encoding`,
+`programs` or `background`) and
 `TEQUILASHOT_DEMO_DIR` to a directory holding the staged assets that
 `hack/screenshots.py` writes.
 
@@ -113,6 +124,7 @@ printf '{"command":"execute","action":"waybar-status"}\n' |
 | `replay-save` | Saves the available replay buffer, returns the completed clip in `file`, and continues buffering. |
 | `replay-stop` | Stops buffering and discards the unsaved buffer. |
 | `waybar-status` | Returns the Waybar status as a JSON string in `message`. |
+| `preferences-status` | Returns, as a JSON string in `message`, the daemon's save folder, whether clean-up is active, and which `TEQUILASHOT_*` environment overrides it sees. |
 
 Recording actions reply once the recorder is running, not when the recording
 ends. Watch `state.recording` with `waybar-status` to learn when it stops.

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 const testCameraDevice = "/dev/video0"
@@ -138,7 +140,7 @@ func TestBestCameraMode(t *testing.T) {
 
 func TestGsrArgs(t *testing.T) {
 	cam := CameraOverlay{Device: testCameraDevice, Position: CameraTopLeft}
-	args, err := gsrArgs("10,20 800x600", "", "o.mp4", 0, 0, AudioSources{Desktop: true}, cam)
+	args, err := gsrArgs(prefs.Default(), "10,20 800x600", "", "o.mp4", 0, 0, AudioSources{Desktop: true}, cam)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,23 +150,23 @@ func TestGsrArgs(t *testing.T) {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
 
-	args, _ = gsrArgs("", "DP-2", "o.mp4", 3840, 2160, AudioSources{}, cam)
+	args, _ = gsrArgs(prefs.Default(), "", "DP-2", "o.mp4", 3840, 2160, AudioSources{}, cam)
 	got = strings.Join(args, " ")
 	if !strings.Contains(got, "-w DP-2|/dev/video0;") || !strings.Contains(got, "-s 1920x2160") {
 		t.Errorf("output args: %q", got)
 	}
 
-	args, _ = gsrArgs("", "DP-1", "o.mp4", 1920, 1080, AudioSources{}, CameraOverlay{})
+	args, _ = gsrArgs(prefs.Default(), "", "DP-1", "o.mp4", 1920, 1080, AudioSources{}, CameraOverlay{})
 	if got = strings.Join(args, " "); got != "-f 60 -c mp4 -o o.mp4 -w DP-1" {
 		t.Errorf("plain args: %q", got)
 	}
 
-	if _, err := gsrArgs("", "DP-1", "o.mp4", 0, 0, AudioSources{}, CameraOverlay{Device: "/dev/video0|DP-1"}); err == nil {
+	if _, err := gsrArgs(prefs.Default(), "", "DP-1", "o.mp4", 0, 0, AudioSources{}, CameraOverlay{Device: "/dev/video0|DP-1"}); err == nil {
 		t.Error("expected validation error")
 	}
 
 	round := CameraOverlay{Device: testCameraDevice, Shape: CameraCircle}
-	args, _ = gsrArgs("", "DP-1", "o.mp4", 1920, 1080, AudioSources{}, round)
+	args, _ = gsrArgs(prefs.Default(), "", "DP-1", "o.mp4", 1920, 1080, AudioSources{}, round)
 	if got = strings.Join(args, " "); got != "-f 60 -c mp4 -o o.mp4 -w DP-1" {
 		t.Errorf("a round camera must be left to the bubble: %q", got)
 	}

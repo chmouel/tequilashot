@@ -12,20 +12,21 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"os"
-	"path/filepath"
 	"sync"
+	"sync/atomic"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
 
 const (
 	// ModelEnv names the model file, overriding the default location.
-	ModelEnv = "TEQUILASHOT_SEGMENTATION_MODEL"
+	ModelEnv = prefs.EnvSegmentationModel
 	// LibraryEnv names the ONNX Runtime shared library to load.
-	LibraryEnv = "TEQUILASHOT_ONNXRUNTIME_LIB"
+	LibraryEnv = prefs.EnvOnnxRuntimeLib
 
-	modelName = "u2net_human_seg.onnx"
-	side      = 320
+	side = 320
 
 	// The mask is stretched to 0..1, then everything below edgeLo is dropped
 	// and everything above edgeHi kept whole.
@@ -46,24 +47,26 @@ var (
 
 	envOnce sync.Once
 	envErr  error
+	loaded  atomic.Value
 )
 
 // ModelPath returns the model file to load. Nothing is downloaded: the file
 // has to be installed by the user.
 func ModelPath() string {
-	if p := os.Getenv(ModelEnv); p != "" {
-		return p
-	}
-	dir := os.Getenv("XDG_DATA_HOME")
-	if dir == "" {
-		home, _ := os.UserHomeDir()
-		dir = filepath.Join(home, ".local", "share")
-	}
-	return filepath.Join(dir, "tequilashot", modelName)
+	return prefs.SegmentationModelPath()
+}
+
+// DefaultModelPath is where the model is looked for and downloaded when no
+// other location is configured.
+func DefaultModelPath() string {
+	return prefs.DefaultSegmentationModelPath()
 }
 
 func libraryPath() (string, error) {
 	if p := os.Getenv(LibraryEnv); p != "" {
+		return p, nil
+	}
+	if p := prefs.Current().OnnxRuntimeLib; p != "" {
 		return p, nil
 	}
 	for _, p := range libraryCandidates {
@@ -72,6 +75,13 @@ func libraryPath() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("ONNX Runtime library not found; install it or set %s", LibraryEnv)
+}
+
+// LoadedLibrary returns the ONNX Runtime library this process has loaded, or
+// an empty string. A different library takes effect only in a new process.
+func LoadedLibrary() string {
+	lib, _ := loaded.Load().(string)
+	return lib
 }
 
 func initRuntime() error {
@@ -84,7 +94,9 @@ func initRuntime() error {
 		ort.SetSharedLibraryPath(lib)
 		if err := ort.InitializeEnvironment(); err != nil {
 			envErr = fmt.Errorf("failed to start ONNX Runtime: %w", err)
+			return
 		}
+		loaded.Store(lib)
 	})
 	return envErr
 }

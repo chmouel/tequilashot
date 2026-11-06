@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 // MediaInfo describes a saved recording or screenshot
@@ -149,7 +151,7 @@ func ProbeMedia(ctx context.Context, file string) (MediaInfo, error) {
 	if err != nil {
 		return MediaInfo{}, err
 	}
-	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", //nolint:gosec
+	out, err := exec.CommandContext(ctx, prefs.Bin("ffprobe"), "-v", "error", "-show_entries", //nolint:gosec
 		"format=duration,start_time,format_name:stream=width,height", "-select_streams", "v:0", "-of", "json", file).Output()
 	if err != nil {
 		return MediaInfo{}, fmt.Errorf("ffprobe: %w", err)
@@ -173,7 +175,7 @@ func FrameOffset(d time.Duration) time.Duration {
 func ExtractFrame(ctx context.Context, file string, d time.Duration) ([]byte, error) {
 	for _, at := range []time.Duration{FrameOffset(d), 0} {
 		var stderr bytes.Buffer
-		cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64), //nolint:gosec
+		cmd := exec.CommandContext(ctx, prefs.Bin("ffmpeg"), "-v", "error", "-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64), //nolint:gosec
 			"-i", file, "-frames:v", "1", "-vf", "scale=640:-2", "-f", "image2pipe", "-c:v", "mjpeg", "-")
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()

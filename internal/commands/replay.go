@@ -20,6 +20,7 @@ type replaySession struct {
 	socket        string
 	runtime       string
 	dir           string
+	saveDir       string
 	done          chan struct{}
 	cleaned       chan struct{}
 	ops           chan struct{}
@@ -73,7 +74,7 @@ func (h *RecordingHandler) StartReplay(ctx context.Context, output string, curre
 	if err != nil {
 		return err
 	}
-	root, err := filepath.Abs(h.cfg.SaveLocation)
+	root, err := filepath.Abs(h.cfg.SaveDir())
 	if err != nil {
 		_ = os.RemoveAll(runtime)
 		return err
@@ -85,7 +86,7 @@ func (h *RecordingHandler) StartReplay(ctx context.Context, output string, curre
 	}
 	childCtx, cancel := context.WithCancel(ctx)
 	sess := &replaySession{
-		cancel: cancel, runtime: runtime, dir: dir, socket: filepath.Join(runtime, "recorder.sock"),
+		cancel: cancel, runtime: runtime, dir: dir, saveDir: root, socket: filepath.Join(runtime, "recorder.sock"),
 		done: make(chan struct{}), cleaned: make(chan struct{}), ops: make(chan struct{}, 1),
 	}
 	stderr := &tailBuffer{max: 4096}
@@ -158,7 +159,7 @@ func (h *RecordingHandler) watchReplay(sess *replaySession, stderr *tailBuffer) 
 			continue
 		}
 		file := filepath.Join(sess.dir, entry.Name())
-		if _, saveErr := h.keepReplay(file, sess.dir); saveErr != nil {
+		if _, saveErr := h.keepReplay(file, sess.dir, sess.saveDir); saveErr != nil {
 			_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Replay file retained", file)
 		}
 	}
@@ -229,7 +230,7 @@ func (h *RecordingHandler) saveReplayClip(ctx context.Context, sess *replaySessi
 		sess.uncertainSave = !errors.Is(err, external.ErrReplayRejected)
 		return "", err
 	}
-	file, err = h.keepReplay(file, sess.dir)
+	file, err = h.keepReplay(file, sess.dir, sess.saveDir)
 	if err != nil {
 		sess.uncertainSave = true
 		return "", err
@@ -237,7 +238,7 @@ func (h *RecordingHandler) saveReplayClip(ctx context.Context, sess *replaySessi
 	return file, nil
 }
 
-func (h *RecordingHandler) keepReplay(file, directory string) (string, error) {
+func (h *RecordingHandler) keepReplay(file, directory, saveDir string) (string, error) {
 	if filepath.Dir(filepath.Clean(file)) != filepath.Clean(directory) || filepath.Ext(file) != ".mp4" {
 		return "", errors.New("recorder returned an unexpected replay path")
 	}
@@ -248,7 +249,7 @@ func (h *RecordingHandler) keepReplay(file, directory string) (string, error) {
 	if !info.Mode().IsRegular() || info.Size() == 0 {
 		return "", errors.New("the replay file is empty or is not a regular file")
 	}
-	target, err := os.CreateTemp(h.cfg.SaveLocation, "replay-"+time.Now().Format("20060102-150405")+"-*.mp4")
+	target, err := os.CreateTemp(saveDir, "replay-"+time.Now().Format("20060102-150405")+"-*.mp4")
 	if err != nil {
 		return "", fmt.Errorf("replay retained at %s: %w", file, err)
 	}

@@ -3,6 +3,8 @@ package external
 import (
 	"strings"
 	"testing"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 func TestParseMicrophones(t *testing.T) {
@@ -58,7 +60,7 @@ func TestGsrSourceMicDevice(t *testing.T) {
 			t.Errorf("%+v = %q, want %q", c.a, got, c.want)
 		}
 	}
-	if _, err := gsrArgs("", "DP-1", "o.mp4", 0, 0, AudioSources{Mic: true, MicDevice: "x|y"}, CameraOverlay{}); err == nil {
+	if _, err := gsrArgs(prefs.Default(), "", "DP-1", "o.mp4", 0, 0, AudioSources{Mic: true, MicDevice: "x|y"}, CameraOverlay{}); err == nil {
 		t.Error("injected mic device accepted")
 	}
 }

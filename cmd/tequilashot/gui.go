@@ -10,6 +10,7 @@ import (
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/internal/gui"
+	"github.com/chmouel/tequilashot/internal/prefs"
 	"github.com/chmouel/tequilashot/pkg/protocol"
 
 	"github.com/urfave/cli/v3"
@@ -22,7 +23,7 @@ func guiAction(_ context.Context, _ *cli.Command) error {
 	}
 
 	return gui.Run(gui.Backend{
-		SaveLocation: cfg.SaveLocation,
+		SaveLocation: cfg.SaveDir(),
 		EnsureDaemon: func() error { return ensureDaemonRunning(cfg) },
 		Send: func(req protocol.Request) (*protocol.Response, error) {
 			timeout := 10 * time.Second
@@ -39,6 +40,7 @@ func guiAction(_ context.Context, _ *cli.Command) error {
 }
 
 func cameraBubbleAction(_ context.Context, c *cli.Command) error {
+	_ = prefs.Reload()
 	return gui.RunCameraBubble(gui.BubbleOptions{
 		Device:           c.String("device"),
 		X:                c.Int("x"),
