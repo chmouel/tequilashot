@@ -85,7 +85,6 @@ func (a *app) primaryMenu() *gtk.MenuButton {
 
 	menu := gio.NewMenu()
 	menu.Append("_Open Video…", "app.open-video")
-	menu.AppendSection("", nil)
 	menu.Append("_Preferences", "app.preferences")
 	menu.Append("_About Tequilashot", "app.about")
 	b := gtk.NewMenuButton()
