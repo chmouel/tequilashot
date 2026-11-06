@@ -10,12 +10,14 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/chmouel/tequilashot/internal/commands"
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/gui"
 	"github.com/chmouel/tequilashot/internal/prefs"
 	"github.com/chmouel/tequilashot/internal/state"
 	"github.com/chmouel/tequilashot/pkg/protocol"
@@ -32,6 +34,7 @@ type Daemon struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	debug             bool
+	cameraCycleMu     sync.Mutex
 }
 
 // New creates a new daemon instance.
@@ -282,6 +285,20 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 
 	case "virtual-camera-stop":
 		err = d.virtualCamera.Stop(ctx)
+
+	case "camera-cycle":
+		d.cameraCycleMu.Lock()
+		var position string
+		position, err = d.recordingHandler.CycleCamera()
+		if errors.Is(err, commands.ErrNoCameraBubble) {
+			position, err = d.virtualCamera.CycleCamera()
+		}
+		if err == nil {
+			if saveErr := gui.RememberCameraPosition(position); saveErr != nil {
+				err = fmt.Errorf("camera moved, but its position could not be saved: %w", saveErr)
+			}
+		}
+		d.cameraCycleMu.Unlock()
 
 	case "toggle-record":
 		startAction := "movie-selection" // default

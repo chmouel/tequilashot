@@ -80,6 +80,12 @@ recorded area if you want it in the video. Clicks outside the circle go
 through to the windows beneath. The bubble closes when the recording stops
 and does not follow a moving window.
 
+Run `tequilashot camera cycle` to move the bubble clockwise around the recorded
+area. If it has been dragged well away from a corner, the first command moves it to
+the nearest one. Cycling stays on the bubble's monitor and remembers the
+chosen corner for the next round camera; `--camera-position` overrides it.
+This also works whilst the virtual camera is live.
+
 It needs a GUI build, [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell)
 and a layer-shell compositor such as Sway or Hyprland.
 
@@ -333,6 +339,8 @@ hl.bind("SUPER + CTRL + R", hl.dsp.exec_cmd("tequilashot toggle-record -a movie-
 hl.bind("SUPER + P", hl.dsp.exec_cmd("tequilashot pause-recording"))
 -- Stop the recording
 hl.bind("SUPER + S", hl.dsp.exec_cmd("tequilashot stop-recording"))
+-- Move the round camera
+hl.bind("SUPER + K", hl.dsp.exec_cmd("tequilashot camera cycle"))
 ```
 
 `pause-recording` toggles between pausing and resuming. The dialogue has no
@@ -359,6 +367,8 @@ bindsym $mod+Ctrl+r exec tequilashot toggle-record -a movie-current-window -w 2
 bindsym $mod+p exec tequilashot pause-recording
 # Stop the recording
 bindsym $mod+s exec tequilashot stop-recording
+# Move the round camera
+bindsym $mod+k exec tequilashot camera cycle
 ```
 
 Adjust the keys to suit your setup, then reload with `swaymsg reload`.

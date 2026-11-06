@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"time"
 
@@ -48,6 +49,8 @@ func cameraBubbleAction(_ context.Context, c *cli.Command) error {
 		X:                c.Int("x"),
 		Y:                c.Int("y"),
 		Diameter:         c.Int("diameter"),
+		Area:             image.Rect(c.Int("area-x"), c.Int("area-y"), c.Int("area-x")+c.Int("area-width"), c.Int("area-y")+c.Int("area-height")),
+		Size:             c.String("size"),
 		Width:            c.Int("width"),
 		Height:           c.Int("height"),
 		FPS:              c.Int("fps"),

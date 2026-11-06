@@ -51,6 +51,7 @@ func main() {
 			pauseRecordingCommand(),
 			toggleRecordCommand(),
 			virtualCameraCommand(),
+			cameraCommand(),
 			cameraBubbleCommand(),
 			entryCommand(),
 		},
@@ -349,6 +350,11 @@ func cameraBubbleCommand() *cli.Command {
 			&cli.IntFlag{Name: "x"},
 			&cli.IntFlag{Name: "y"},
 			&cli.IntFlag{Name: "diameter", Required: true},
+			&cli.IntFlag{Name: "area-x"},
+			&cli.IntFlag{Name: "area-y"},
+			&cli.IntFlag{Name: "area-width", Required: true},
+			&cli.IntFlag{Name: "area-height", Required: true},
+			&cli.StringFlag{Name: "size"},
 			&cli.IntFlag{Name: "width"},
 			&cli.IntFlag{Name: "height"},
 			&cli.IntFlag{Name: "fps"},
@@ -357,6 +363,27 @@ func cameraBubbleCommand() *cli.Command {
 			&cli.BoolFlag{Name: "no-ring"},
 		},
 		Action: cameraBubbleAction,
+	}
+}
+
+func cameraCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "camera",
+		Usage: "Control the round camera",
+		Commands: []*cli.Command{{
+			Name:  "cycle",
+			Usage: "Move the round camera to the next corner",
+			Action: func(ctx context.Context, c *cli.Command) error {
+				cfg, err := config.Load()
+				if err != nil {
+					return err
+				}
+				if !isDaemonRunning(cfg.SocketPath) {
+					return fmt.Errorf("the round camera is not running")
+				}
+				return sendAndHandleRequest(cfg.SocketPath, protocol.Request{Command: "execute", Action: "camera-cycle"})
+			},
+		}},
 	}
 }
 
@@ -564,8 +591,7 @@ func cameraFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:  "camera-position",
-			Usage: "Corner for the camera: top-left, top-right, bottom-left or bottom-right",
-			Value: external.CameraBottomRight,
+			Usage: "Corner for the camera: top-left, top-right, bottom-left or bottom-right (default: saved corner for the round camera, otherwise bottom-right)",
 		},
 		&cli.StringFlag{
 			Name:  "camera-size",
@@ -609,7 +635,9 @@ func withCameraOptions(c *cli.Command, options map[string]interface{}) map[strin
 	}
 	options["camera"] = true
 	options["camera_device"] = c.String("camera-device")
-	options["camera_position"] = c.String("camera-position")
+	if c.IsSet("camera-position") {
+		options["camera_position"] = c.String("camera-position")
+	}
 	options["camera_size"] = c.String("camera-size")
 	options["camera_shape"] = c.String("camera-shape")
 	options["camera_mirror"] = c.Bool("camera-mirror")

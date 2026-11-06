@@ -127,3 +127,13 @@ func TestReplayRequests(t *testing.T) {
 		t.Fatalf("unexpected replay response: %+v %+v", resp, status)
 	}
 }
+
+func TestCycleCameraWithoutBubble(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	d := New(&config.Config{}, false)
+	defer d.cancel()
+	resp := d.executeCommand(protocol.Request{Action: "camera-cycle"})
+	if resp.Success || resp.Message != "the round camera is not running" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}

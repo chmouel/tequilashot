@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"errors"
+	"image"
 	"os"
 	"path/filepath"
 	"slices"
@@ -135,7 +136,7 @@ func TestVirtualCameraUnexpectedExit(t *testing.T) {
 	cam := newFakeLive()
 	_, notes := stubVirtualCamera(t, cam, nil)
 	bubble := &fakeBubble{stopped: make(chan struct{})}
-	startBubble = func(external.CameraOverlay, int, int, int) (stopper, error) { return bubble, nil }
+	startBubble = func(external.CameraOverlay, int, int, int, image.Rectangle) (stopper, error) { return bubble, nil }
 	stubCameraList(t)
 	h, st := newVirtualHandler()
 
@@ -178,7 +179,7 @@ func stubCameraList(t *testing.T) {
 func TestVirtualCameraFailedStartRemovesBubble(t *testing.T) {
 	stubVirtualCamera(t, nil, errors.New("the virtual camera stopped at once: no output"))
 	bubble := &fakeBubble{stopped: make(chan struct{})}
-	startBubble = func(external.CameraOverlay, int, int, int) (stopper, error) { return bubble, nil }
+	startBubble = func(external.CameraOverlay, int, int, int, image.Rectangle) (stopper, error) { return bubble, nil }
 	stubCameraList(t)
 	h, st := newVirtualHandler()
 

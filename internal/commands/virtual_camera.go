@@ -198,6 +198,20 @@ func (h *VirtualCameraHandler) Stop(context.Context) error {
 	return nil
 }
 
+// CycleCamera returns ErrNoCameraBubble when the virtual camera has no bubble.
+func (h *VirtualCameraHandler) CycleCamera() (string, error) {
+	h.mu.Lock()
+	var bubble stopper
+	if h.current != nil {
+		bubble = h.current.bubble
+	}
+	h.mu.Unlock()
+	if bubble == nil {
+		return "", ErrNoCameraBubble
+	}
+	return bubble.Cycle()
+}
+
 // Toggle stops a running virtual camera, or starts one.
 func (h *VirtualCameraHandler) Toggle(ctx context.Context, opts VirtualCameraOptions) error {
 	h.mu.Lock()
