@@ -199,3 +199,26 @@ func RenameTarget(oldPath, name string) (string, error) {
 	}
 	return target, nil
 }
+
+func probeTrimSource(ctx context.Context, file string) (MediaInfo, error) {
+	st, err := os.Stat(file)
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	if !st.Mode().IsRegular() {
+		return MediaInfo{}, errors.New("please select a regular video file")
+	}
+	f, err := os.Open(file) //nolint:gosec
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	_ = f.Close()
+	info, err := ProbeMedia(ctx, file)
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	if info.Duration <= 0 || info.Width <= 0 || info.Height <= 0 {
+		return MediaInfo{}, errors.New("the file needs a video stream and a readable duration")
+	}
+	return info, nil
+}

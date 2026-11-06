@@ -72,6 +72,7 @@ type app struct {
 	pages        *gtk.Stack
 	res          resultView
 	trim         trimView
+	importVideo  trimImport
 	settings     Settings
 	settingsPath string
 	startButton  *gtk.Button
@@ -339,6 +340,7 @@ func (a *app) build() {
 			return true
 		}
 		a.closing = true
+		a.cancelTrimImport()
 		a.stopThumbTimer()
 		a.stopPreview()
 		trimDone := a.trim.done
@@ -358,6 +360,9 @@ func (a *app) build() {
 	key := gtk.NewEventControllerKey()
 	key.SetPropagationPhase(gtk.PhaseCapture)
 	key.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
+		if a.res.dialogOpen {
+			return false
+		}
 		switch keyval {
 		case gdk.KEY_space:
 			if !a.aboutOpen && a.pages.VisibleChildName() == pageTrim && a.trim.export == nil {
@@ -452,6 +457,10 @@ func (a *app) build() {
 
 	root := gtk.NewBox(gtk.OrientationVertical, 0)
 	header := adw.NewHeaderBar()
+	open := gtk.NewButtonWithLabel("Open video")
+	open.ConnectClicked(a.chooseTrimVideo)
+	header.PackStart(open)
+	a.win.AddController(a.trimDropTarget())
 	header.PackEnd(a.headerAction("emote-love-symbolic", "Sponsor Tequilashot", "er-sponsor", a.sponsor))
 	header.PackEnd(a.headerAction("help-about-symbolic", "About Tequilashot", "", a.showAbout))
 	root.Append(header)
@@ -1033,6 +1042,10 @@ func lastDotted(class string) string {
 }
 
 func (a *app) startCapture() {
+	if a.res.dialogOpen {
+		return
+	}
+	a.cancelTrimImport()
 	if a.busy || a.closing {
 		return
 	}

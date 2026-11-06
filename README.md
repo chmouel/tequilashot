@@ -156,13 +156,14 @@ add Copy image and Edit, which opens [Satty](https://github.com/gabm/satty)
 and reloads the preview on save. New recording, New screenshot or Escape goes
 back to the setup page.
 
+Open an existing local video with Open video, or drop one onto the idle window.
 Recordings and saved replays also offer Trim. Drag the two timeline handles
 to select a section, or enter precise start and end times in seconds. Keep
 selection saves that section; Remove selection cuts it out and joins the
 remaining footage. Preview edit plays the result before saving. Click the
 timeline to seek, or focus it and use Left and Right (hold Shift for larger
 steps). Space plays or pauses; Reset restores the full selection and Back or
-Escape returns to the saved recording.
+Escape returns to the previous page.
 
 Save copy creates a uniquely named `-trimmed.mp4` beside the original, which
 is kept. Saving shows progress and can be cancelled.

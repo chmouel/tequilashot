@@ -21,37 +21,39 @@ import (
 const pageTrim = "trim"
 
 type trimView struct {
-	video      *gtk.Video
-	media      *gtk.MediaFile
-	timeline   *gtk.DrawingArea
-	thumbs     []*gtk.Picture
-	start, end *gtk.SpinButton
-	keep       *gtk.ToggleButton
-	play       *gtk.Button
-	preview    *gtk.Button
-	save       *gtk.Button
-	back       *gtk.Button
-	reset      *gtk.Button
-	controls   *gtk.Box
-	progress   *gtk.ProgressBar
-	caption    *gtk.Label
-	position   *gtk.Label
-	name       *gtk.Label
-	status     *gtk.Label
-	selection  trimSelection
-	syncing    bool
-	previewing bool
-	segment    int
-	playhead   time.Duration
-	seekTarget time.Duration
-	seekQueued bool
-	lastSeek   time.Time
-	playOnSeek bool
-	timer      glib.SourceHandle
-	cancel     context.CancelFunc
-	export     context.CancelFunc
-	done       chan struct{}
-	gen        int
+	file, mode, returnPage string
+	info                   MediaInfo
+	video                  *gtk.Video
+	media                  *gtk.MediaFile
+	timeline               *gtk.DrawingArea
+	thumbs                 []*gtk.Picture
+	start, end             *gtk.SpinButton
+	keep                   *gtk.ToggleButton
+	play                   *gtk.Button
+	preview                *gtk.Button
+	save                   *gtk.Button
+	back                   *gtk.Button
+	reset                  *gtk.Button
+	controls               *gtk.Box
+	progress               *gtk.ProgressBar
+	caption                *gtk.Label
+	position               *gtk.Label
+	name                   *gtk.Label
+	status                 *gtk.Label
+	selection              trimSelection
+	syncing                bool
+	previewing             bool
+	segment                int
+	playhead               time.Duration
+	seekTarget             time.Duration
+	seekQueued             bool
+	lastSeek               time.Time
+	playOnSeek             bool
+	timer                  glib.SourceHandle
+	cancel                 context.CancelFunc
+	export                 context.CancelFunc
+	done                   chan struct{}
+	gen                    int
 }
 
 func (a *app) buildTrim() *gtk.Box {
@@ -335,24 +337,33 @@ func (a *app) drawTrimTimeline(_ *gtk.DrawingArea, cr *cairo.Context, width, hei
 }
 
 func (a *app) openTrim() {
-	t := &a.trim
 	if a.res.info.Duration <= 0 {
 		a.toast("The recording's length could not be read. FFprobe is required for trimming.")
 		return
 	}
+	a.openTrimSource(a.res.file, a.res.info, a.res.mode, pageResult, nil)
+}
+
+func (a *app) openTrimSource(file string, info MediaInfo, mode, returnPage string, prepared *gtk.MediaFile) {
+	a.stopTrim()
+	t := &a.trim
+	t.file, t.info, t.mode, t.returnPage = file, info, mode, returnPage
 	t.gen++
 	t.playhead = 0
 	t.seekQueued, t.playOnSeek = false, false
 	t.lastSeek = time.Time{}
-	t.selection = trimSelection{end: a.res.info.Duration, duration: a.res.info.Duration}
+	t.selection = trimSelection{end: info.Duration, duration: info.Duration}
 	t.syncing = true
 	t.start.SetRange(0, t.selection.duration.Seconds())
 	t.end.SetRange(0, t.selection.duration.Seconds())
 	t.keep.SetActive(true)
 	t.syncing = false
 	t.status.SetVisible(false)
-	t.name.SetText(filepath.Base(a.res.file))
-	t.media = gtk.NewMediaFileForFilename(a.res.file)
+	t.name.SetText(filepath.Base(file))
+	t.media = prepared
+	if t.media == nil {
+		t.media = gtk.NewMediaFileForFilename(file)
+	}
 	media := t.media
 	showPreviewError := func() {
 		if t.media == media && media.Error() != nil {
@@ -364,7 +375,7 @@ func (a *app) openTrim() {
 	showPreviewError()
 	t.video.SetMediaStream(t.media)
 	a.pages.SetVisibleChildName(pageTrim)
-	a.win.SetTitle("Trim recording")
+	a.win.SetTitle("Trim video")
 	a.updateTrim()
 	t.timer = glib.TimeoutAdd(40, a.tickTrim)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -502,7 +513,7 @@ func (a *app) tickTrim() bool {
 
 func (a *app) loadTrimThumbnails(ctx context.Context) {
 	t := &a.trim
-	gen, file, duration := t.gen, a.res.file, t.selection.duration
+	gen, file, duration := t.gen, t.file, t.selection.duration
 	for _, pic := range t.thumbs {
 		pic.SetPaintable(nil)
 	}
@@ -558,8 +569,14 @@ func (a *app) leaveTrim() {
 	if a.trim.export != nil {
 		return
 	}
+	a.cancelTrimImport()
+	page := a.trim.returnPage
 	a.stopTrim()
-	a.showResult(a.res.file, a.res.info, a.res.mode)
+	if page == pageResult {
+		a.showResult(a.res.file, a.res.info, a.res.mode)
+	} else {
+		a.showSetup()
+	}
 }
 
 func (a *app) saveTrim() {
@@ -588,7 +605,7 @@ func (a *app) saveTrim() {
 	t.progress.SetText("Saving copy…")
 	t.progress.SetVisible(true)
 	t.status.SetVisible(false)
-	file, selection, mode := a.res.file, t.selection, a.res.mode
+	file, selection, mode := t.file, t.selection, t.mode
 	go func() {
 		defer close(done)
 		defer cancel()
