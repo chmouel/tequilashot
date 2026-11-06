@@ -62,9 +62,14 @@ type CameraOverlay struct {
 	Size     string // defaults to medium
 	Shape    string // defaults to square
 	Mirror   bool
-	Width    int // chosen camera mode; zero lets gpu-screen-recorder pick
-	Height   int
-	FPS      int
+	// RemoveBackground makes everything but the person transparent. It is
+	// only available for the round camera, which is drawn by tequilashot.
+	RemoveBackground bool
+	// NoRing hides the white ring; it needs RemoveBackground.
+	NoRing bool
+	Width  int // chosen camera mode; zero lets gpu-screen-recorder pick
+	Height int
+	FPS    int
 }
 
 // Enabled reports whether the overlay is switched on.
@@ -92,6 +97,12 @@ func (c CameraOverlay) Validate() error {
 	}
 	if c.Shape != "" && !ValidCameraShape(c.Shape) {
 		return fmt.Errorf("invalid camera shape %q (valid: square, circle)", c.Shape)
+	}
+	if c.RemoveBackground && !c.Round() {
+		return fmt.Errorf("removing the camera background needs the circle shape")
+	}
+	if c.NoRing && !c.RemoveBackground {
+		return fmt.Errorf("hiding the camera ring needs the background removed")
 	}
 	if c.Width < 0 || c.Height < 0 || c.FPS < 0 {
 		return fmt.Errorf("invalid camera mode %dx%d@%d", c.Width, c.Height, c.FPS)

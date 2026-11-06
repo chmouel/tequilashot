@@ -143,6 +143,8 @@ being overwritten. Stopping recovers completed exports left in staging.
 | `camera_size` | `small`, `medium`, `large` | Recordings |
 | `camera_shape` | `square`, `circle` | Recordings |
 | `camera_mirror` | boolean | Recordings |
+| `camera_no_ring` | boolean; hides the ring, needs `camera_remove_background` | Recordings and virtual camera |
+| `camera_remove_background` | boolean; needs the circle shape (always set for the virtual camera) | Recordings and virtual camera |
 | `quiet_finish` | boolean; the finish notification omits its file actions because the client shows the result | Recordings |
 | `start_action` | string, a recording action | `toggle-record` |
 | `icons` | object with `Idle`, `Recording`, `Paused`, `Countdown`, `Live` and `Replay` strings | `waybar-status` |

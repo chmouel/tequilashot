@@ -57,6 +57,7 @@ flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); 
 .er-prevholder { background: #1e293b; color: #94a3b8; }
 .er-camtile { border-radius: 6px; background: #334155; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px @accent_bg_color; }
 .er-camtile.er-round { border-radius: 9999px; }
+.er-camtile.er-cutout { background: transparent; box-shadow: none; }
 .er-cammsg { font-size: 0.7em; color: #cbd5e1; }
 .er-mirror { transform: scale(-1, 1); }
 .er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
@@ -115,6 +116,13 @@ type app struct {
 	cameraRevealer *gtk.Revealer
 	cameraBox      *gtk.Box
 	mirror         *adw.SwitchRow
+	cutout         *adw.SwitchRow
+	noRing         *adw.SwitchRow
+	modelRow       *adw.ActionRow
+	modelBtn       *gtk.Button
+	modelBusy      bool
+	previewCut     bool
+	previewCutter  *cutter
 	camRow         *adw.ComboRow
 	cameras        []string
 	camModes       []external.CameraMode

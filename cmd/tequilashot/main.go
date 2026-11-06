@@ -352,6 +352,8 @@ func cameraBubbleCommand() *cli.Command {
 			&cli.IntFlag{Name: "height"},
 			&cli.IntFlag{Name: "fps"},
 			&cli.BoolFlag{Name: "mirror"},
+			&cli.BoolFlag{Name: "remove-background"},
+			&cli.BoolFlag{Name: "no-ring"},
 		},
 		Action: cameraBubbleAction,
 	}
@@ -551,6 +553,14 @@ func cameraFlags() []cli.Flag {
 			Name:  "camera-mirror",
 			Usage: "Mirror the camera image horizontally",
 		},
+		&cli.BoolFlag{
+			Name:  "camera-remove-background",
+			Usage: "Make everything but you transparent in the round camera (needs --camera-shape circle or the virtual camera)",
+		},
+		&cli.BoolFlag{
+			Name:  "camera-no-ring",
+			Usage: "Hide the white ring around the round camera (needs --camera-remove-background)",
+		},
 	}
 }
 
@@ -575,6 +585,8 @@ func withCameraOptions(c *cli.Command, options map[string]interface{}) map[strin
 	options["camera_size"] = c.String("camera-size")
 	options["camera_shape"] = c.String("camera-shape")
 	options["camera_mirror"] = c.Bool("camera-mirror")
+	options["camera_remove_background"] = c.Bool("camera-remove-background")
+	options["camera_no_ring"] = c.Bool("camera-no-ring")
 	return options
 }
 

@@ -83,6 +83,31 @@ and does not follow a moving window.
 It needs a GUI build, [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell)
 and a layer-shell compositor such as Sway or Hyprland.
 
+#### Removing the background
+
+Switch on Remove background (`--camera-remove-background`) to show only
+yourself in the circle. Your surroundings become transparent, so the screen
+beneath shows through whilst the white ring stays. It works for the round
+camera in recordings and in the virtual camera, and not for the square one.
+Add Hide ring (`--camera-no-ring`) to drop the white ring as well.
+
+The segmentation runs on the CPU, so expect a lower frame rate than the plain
+camera, roughly six pictures a second on a desktop processor. It is a
+person-segmentation model and will occasionally clip hair or hands. Nothing is
+downloaded behind your back, but the dialogue offers a Download button for the model. You need:
+
+- [ONNX Runtime](https://onnxruntime.ai/) as a shared library, found in the usual
+  system locations or through `TEQUILASHOT_ONNXRUNTIME_LIB`. The Go binding is
+  built for version 1.29.
+- The `u2net_human_seg.onnx` model (Apache-2.0, from the
+  [rembg releases](https://github.com/danielgatis/rembg/releases/tag/v0.0.0)),
+  saved as `~/.local/share/tequilashot/u2net_human_seg.onnx` or named by
+  `TEQUILASHOT_SEGMENTATION_MODEL`.
+
+If either is missing, or the segmentation fails, the round camera is hidden and
+an error is reported instead of showing your real background. A recording or
+the virtual camera that is already running carries on without it.
+
 ### Virtual camera
 
 Camera mode publishes the chosen monitor, window or region as a webcam that
@@ -274,7 +299,8 @@ Recording flags:
 - `--camera`, `-C`: webcam. Tune it with `--camera-device`,
   `--camera-position` (`top-left`, `top-right`, `bottom-left`, `bottom-right`),
   `--camera-size` (`small`, `medium`, `large`), `--camera-mirror` and
-  `--camera-shape circle` for the [round camera](#round-camera).
+  `--camera-shape circle` for the [round camera](#round-camera), which also
+  accepts `--camera-remove-background`.
 - `--crop-top <px>` (screen recordings only): trim pixels from the top.
 
 ### Hyprland key bindings

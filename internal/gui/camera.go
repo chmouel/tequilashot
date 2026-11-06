@@ -4,6 +4,8 @@ package gui
 
 import (
 	"context"
+	"fmt"
+	"image"
 	"log"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/segment"
 )
 
 var (
@@ -119,6 +122,28 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	a.mirror.SetActive(a.settings.CameraMirror)
 	a.mirror.NotifyProperty("active", a.syncMirror)
 
+	a.cutout = adw.NewSwitchRow()
+	a.cutout.SetTitle("Remove background")
+	a.cutout.SetSubtitle("Shows only you; the picture behind shows through. Needs ONNX Runtime and the model")
+	a.cutout.SetActive(a.settings.CameraRemoveBackground)
+	a.cutout.NotifyProperty("active", func() {
+		a.syncShape()
+		a.syncPreview()
+	})
+
+	a.modelRow = adw.NewActionRow()
+	a.modelRow.SetTitle("Background removal model")
+	a.modelBtn = gtk.NewButtonWithLabel("Download")
+	a.modelBtn.SetVAlign(gtk.AlignCenter)
+	a.modelBtn.AddCSSClass("suggested-action")
+	a.modelBtn.ConnectClicked(a.downloadModel)
+	a.modelRow.AddSuffix(a.modelBtn)
+
+	a.noRing = adw.NewSwitchRow()
+	a.noRing.SetTitle("Hide ring")
+	a.noRing.SetSubtitle("Leaves out the white ring around you")
+	a.noRing.SetActive(a.settings.CameraNoRing)
+
 	list := gtk.NewListBox()
 	list.SetSelectionMode(gtk.SelectionNone)
 	list.AddCSSClass("boxed-list")
@@ -126,6 +151,9 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	list.Append(sizeRow)
 	list.Append(a.shapeRow)
 	list.Append(a.mirror)
+	list.Append(a.cutout)
+	list.Append(a.modelRow)
+	list.Append(a.noRing)
 
 	a.cameraBox = gtk.NewBox(gtk.OrientationVertical, 14)
 	a.cameraBox.SetMarginTop(8)
@@ -311,7 +339,70 @@ func (a *app) syncShape() {
 	} else {
 		a.camTile.RemoveCSSClass("er-round")
 	}
+	a.cutout.SetVisible(a.round())
+	a.noRing.SetVisible(a.cutoutWanted())
+	a.syncModelRow()
+	if a.round() && a.cutout.Active() {
+		a.camTile.AddCSSClass("er-cutout")
+	} else {
+		a.camTile.RemoveCSSClass("er-cutout")
+	}
 	a.prevOverlay.QueueResize()
+}
+
+// syncModelRow shows what removal still needs: the system's ONNX Runtime, or
+// the model, which can be downloaded here.
+func (a *app) syncModelRow() {
+	if !a.cutoutWanted() || a.modelBusy {
+		a.modelRow.SetVisible(a.modelBusy && a.cutoutWanted())
+		return
+	}
+	switch {
+	case segment.RuntimeAvailable() != nil:
+		a.modelRow.SetVisible(true)
+		a.modelRow.SetSubtitle("ONNX Runtime was not found. Install your distribution's onnxruntime package")
+		a.modelBtn.SetVisible(false)
+	case !segment.ModelInstalled():
+		a.modelRow.SetVisible(true)
+		a.modelRow.SetSubtitle("Needed once, about 176 MB, saved to " + segment.ModelPath())
+		a.modelBtn.SetLabel("Download")
+		a.modelBtn.SetVisible(true)
+		a.modelBtn.SetSensitive(true)
+	default:
+		a.modelRow.SetVisible(false)
+	}
+}
+
+// downloadModel fetches the model in the background, then restarts the preview.
+func (a *app) downloadModel() {
+	a.modelBusy = true
+	a.modelBtn.SetSensitive(false)
+	a.modelRow.SetSubtitle("Downloading, 0%")
+	go func() {
+		last := -1
+		err := segment.DownloadModel(context.Background(), func(done, total int64) {
+			if pct := int(done * 100 / total); pct != last {
+				last = pct
+				glib.IdleAdd(func() { a.modelRow.SetSubtitle(fmt.Sprintf("Downloading, %d%%", pct)) })
+			}
+		})
+		glib.IdleAdd(func() {
+			a.modelBusy = false
+			if err != nil {
+				a.toast("The model could not be downloaded: " + err.Error())
+			} else {
+				a.toast("Background removal model installed")
+			}
+			a.syncModelRow()
+			a.syncPreview()
+		})
+	}()
+}
+
+// cutoutWanted reports whether the background is to be removed, which only
+// the round camera supports.
+func (a *app) cutoutWanted() bool {
+	return a.round() && a.cutout != nil && a.cutout.Active()
 }
 
 func (a *app) syncMirror() {
@@ -439,21 +530,55 @@ func (a *app) syncPreview() {
 		}
 		return
 	}
-	if a.preview != nil && a.previewDev == a.camSel {
+	cut := a.cutoutWanted()
+	if cut && (segment.RuntimeAvailable() != nil || !segment.ModelInstalled()) {
+		// The row explains what is missing; no raw picture is shown meanwhile.
+		a.stopPreview()
+		a.camPic.SetPaintable(nil)
 		return
 	}
+	if a.preview != nil && a.previewDev == a.camSel && a.previewCut == cut {
+		return
+	}
+	a.closePreviewCutter()
 
 	a.gate.Retire(a.preview)
 	a.previewGen++
 	gen, device := a.previewGen, a.camSel
-	a.previewDev = device
+	a.previewDev, a.previewCut = device, cut
 	a.camPic.SetPaintable(nil)
 	a.camMsg.SetVisible(false)
 
+	// Without the cut-out the picture must never show the raw frame, so a
+	// failure here leaves the tile empty with its message.
+	var onFrame func([]byte)
+	failed := func() {
+		glib.IdleAdd(func() {
+			if gen == a.previewGen {
+				a.camPic.SetPaintable(nil)
+				a.camMsg.SetVisible(true)
+			}
+		})
+	}
 	latest := &external.LatestFrame{}
 	w, h := external.PreviewMode(a.camModes, device)
-	a.preview = startPreview(&a.gate, device, w, h, previewFPS,
-		func(frame []byte) {
+	if cut {
+		a.previewCutter = newCutter(
+			func(img *image.RGBA) {
+				glib.IdleAdd(func() {
+					if gen == a.previewGen {
+						a.camPic.SetPaintable(rgbaTexture(img))
+						a.camMsg.SetVisible(false)
+					}
+				})
+			},
+			func(err error) {
+				log.Printf("background removal: %v", err)
+				failed()
+			})
+		onFrame = a.previewCutter.Put
+	} else {
+		onFrame = func(frame []byte) {
 			if !latest.Put(frame) {
 				return
 			}
@@ -467,21 +592,23 @@ func (a *app) syncPreview() {
 					a.camMsg.SetVisible(false)
 				}
 			})
-		},
-		func() {
-			glib.IdleAdd(func() {
-				if gen == a.previewGen {
-					a.camPic.SetPaintable(nil)
-					a.camMsg.SetVisible(true)
-				}
-			})
-		})
+		}
+	}
+	a.preview = startPreview(&a.gate, device, w, h, previewFPS, onFrame, failed)
+}
+
+func (a *app) closePreviewCutter() {
+	if a.previewCutter != nil {
+		a.previewCutter.Close()
+		a.previewCutter = nil
+	}
 }
 
 // stopPreview ends the live preview at once. The camera stays claimed by the
 // gate until the process has exited.
 func (a *app) stopPreview() {
 	a.gate.Retire(a.preview)
+	a.closePreviewCutter()
 	a.preview, a.previewDev = nil, ""
 	a.previewGen++
 }
@@ -490,6 +617,8 @@ func (a *app) stopPreview() {
 func (a *app) cameraSettings(s *Settings) {
 	s.Camera = a.camera.Active()
 	s.CameraMirror = a.mirror.Active()
+	s.CameraRemoveBackground = a.cutout.Active()
+	s.CameraNoRing = a.noRing.Active()
 	s.CameraPosition = a.camPos
 	s.CameraSize = a.camSize
 	s.CameraShape = a.camShape

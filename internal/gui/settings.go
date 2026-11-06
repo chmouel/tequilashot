@@ -42,6 +42,9 @@ type Settings struct {
 	CameraSize     string `json:"camera_size"`
 	CameraShape    string `json:"camera_shape"`
 	CameraMirror   bool   `json:"camera_mirror"`
+
+	CameraRemoveBackground bool `json:"camera_remove_background"`
+	CameraNoRing           bool `json:"camera_no_ring"`
 }
 
 // DefaultSettings returns the settings used on first launch.
@@ -212,6 +215,8 @@ func BuildRequest(s Settings, sel Selection) (protocol.Request, error) {
 		opts["camera_size"] = s.CameraSize
 		opts["camera_shape"] = s.CameraShape
 		opts["camera_mirror"] = s.CameraMirror
+		opts["camera_remove_background"] = s.CameraRemoveBackground && s.CameraShape == external.CameraCircle
+		opts["camera_no_ring"] = s.CameraNoRing && s.CameraRemoveBackground && s.CameraShape == external.CameraCircle
 	}
 	req := protocol.Request{Command: "execute", Options: opts}
 
@@ -247,6 +252,8 @@ func buildCameraRequest(s Settings, sel Selection) (protocol.Request, error) {
 		opts["camera_position"] = s.CameraPosition
 		opts["camera_size"] = s.CameraSize
 		opts["camera_mirror"] = s.CameraMirror
+		opts["camera_remove_background"] = s.CameraRemoveBackground
+		opts["camera_no_ring"] = s.CameraNoRing && s.CameraRemoveBackground
 	}
 	switch s.Source {
 	case SourceMonitor:
