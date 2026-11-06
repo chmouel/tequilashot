@@ -117,11 +117,11 @@ func (a *app) importTrimFiles(files []*gio.File) bool {
 			media := gtk.NewMediaFileForFilename(file)
 			p.media = media
 			p.timer = glib.TimeoutAdd(40, func() bool {
-				if media.Error() == nil && !media.IsPrepared() && ctx.Err() == nil {
+				if trimMediaError(media) == nil && !media.IsPrepared() && ctx.Err() == nil {
 					return true
 				}
 				p.timer = 0
-				if media.Error() != nil {
+				if trimMediaError(media) != nil {
 					fail("GTK could not decode this video; please check the installed codecs")
 					return false
 				}

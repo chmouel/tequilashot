@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func trimGUIApp(t *testing.T) *app {
 		t.Fatal("GTK needs a display")
 	}
 	adw.Init()
-	application := gtk.NewApplication("com.chmouel.Tequilashot.Test", gio.ApplicationNonUnique)
+	application := gtk.NewApplication("com.chmouel.Tequilashot.Test"+strconv.FormatInt(time.Now().UnixNano(), 10), gio.ApplicationNonUnique)
 	if err := application.Register(context.Background()); err != nil {
 		t.Fatal(err)
 	}

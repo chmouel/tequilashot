@@ -55,14 +55,14 @@ func trimLength(segments []trimSegment) time.Duration {
 }
 
 func trimSeconds(d time.Duration) string {
-	return strconv.FormatFloat(d.Seconds(), 'f', 6, 64)
+	return strconv.FormatFloat(d.Seconds(), 'f', 9, 64)
 }
 
 func trimFilters(segments []trimSegment, audio bool) string {
 	var filters, inputs []string
 	for i, segment := range segments {
 		span := "start=" + trimSeconds(segment.start) + ":end=" + trimSeconds(segment.end)
-		filters = append(filters, fmt.Sprintf("[0:v:0]trim=%s,setpts=PTS-STARTPTS[v%d]", span, i))
+		filters = append(filters, fmt.Sprintf("[0:v:0]select='gte(t,%s)*lt(t,%s)',setpts=PTS-STARTPTS[v%d]", trimSeconds(segment.start), trimSeconds(segment.end), i))
 		inputs = append(inputs, fmt.Sprintf("[v%d]", i))
 		if audio {
 			// Keep audio on the requested timeline, including an initial delay or a short track
@@ -119,7 +119,7 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 	}
 	args := []string{
 		"-hide_banner", "-v", "error", "-nostdin", "-y", "-copyts", "-start_at_zero", "-i", source,
-		"-filter_complex", trimFilters(segments, audio), "-map", "[video]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+		"-filter_complex", trimFilters(segments, audio), "-map", "[video]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-fps_mode", "vfr", "-enc_time_base", "1:1000000",
 	}
 	if audio {
 		args = append(args, "-map", "[audio]", "-c:a", "aac", "-b:a", "192k")

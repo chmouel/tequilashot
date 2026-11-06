@@ -69,7 +69,7 @@ func TestTrimPlayback(t *testing.T) {
 		if time.Now().After(deadline) {
 			return fail("playback did not advance")
 		}
-		if err := media.Error(); err != nil {
+		if err := trimMediaError(media); err != nil {
 			return fail(err.Error())
 		}
 		if !media.IsPrepared() {

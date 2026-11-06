@@ -14,9 +14,14 @@ The trimmer's playback check needs FFmpeg, a GTK media backend and a display.
 Run it on an isolated display with:
 
 ```sh
-dbus-run-session -- xvfb-run -a env GDK_BACKEND=x11 GTK_A11Y=none \
-  TEQUILASHOT_TEST_GUI=1 go test ./internal/gui -run '^TestTrimPlayback$' -count=1
+dbus-run-session -- xvfb-run -a env GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  TEQUILASHOT_TEST_GUI=1 go test ./internal/gui -run '^TestTrim(Playback|Import|HistoryInteraction|FrameInteraction|SparseAndPlayingFrames)$' -count=1
 ```
+
+Frame interaction checks read binary frame markers from the displayed texture
+and compare exported boundary frames. Paused stepping uses FFmpeg stills because
+GTK's GStreamer backend can skip overlapping B-frames in variable-rate videos.
+Frame timestamps are loaded in bounded windows; ordinary playback remains with GTK.
 
 The default build links GTK 4, libadwaita and, at run time, gtk4-layer-shell
 for the round camera. Two build tags change what is compiled:

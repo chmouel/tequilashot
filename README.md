@@ -161,8 +161,9 @@ Recordings and saved replays also offer Trim. Drag the two timeline handles
 to select a section, or enter precise start and end times in seconds. Keep
 selection saves that section; Remove selection cuts it out and joins the
 remaining footage. Preview edit plays the result before saving. Click the
-timeline to seek, or focus it and use Left and Right (hold Shift for larger
-steps). Space plays or pauses. Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z) restore edits;
+timeline to seek, or use Previous frame and Next frame. Left and Right step
+one frame whilst the video or timeline has focus; hold Shift to jump one second.
+Start here and End here include the displayed frame in the selection. Space plays or pauses. Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z) restore edits;
 Reset restores the full selection and Back or
 Escape returns to the previous page.
 

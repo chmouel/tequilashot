@@ -21,41 +21,55 @@ import (
 const pageTrim = "trim"
 
 type trimView struct {
-	history                trimHistory
-	undo, redo             *gtk.Button
-	file, mode, returnPage string
-	info                   MediaInfo
-	video                  *gtk.Video
-	media                  *gtk.MediaFile
-	timeline               *gtk.DrawingArea
-	thumbs                 []*gtk.Picture
-	start, end             *gtk.SpinButton
-	keep                   *gtk.ToggleButton
-	play                   *gtk.Button
-	preview                *gtk.Button
-	save                   *gtk.Button
-	back                   *gtk.Button
-	reset                  *gtk.Button
-	controls               *gtk.Box
-	progress               *gtk.ProgressBar
-	caption                *gtk.Label
-	position               *gtk.Label
-	name                   *gtk.Label
-	status                 *gtk.Label
-	selection              trimSelection
-	syncing                bool
-	previewing             bool
-	segment                int
-	playhead               time.Duration
-	seekTarget             time.Duration
-	seekQueued             bool
-	lastSeek               time.Time
-	playOnSeek             bool
-	timer                  glib.SourceHandle
-	cancel                 context.CancelFunc
-	export                 context.CancelFunc
-	done                   chan struct{}
-	gen                    int
+	framePauseTimer                              glib.SourceHandle
+	display                                      *gtk.Stack
+	frameImage                                   *gtk.Picture
+	frameImageAt                                 time.Duration
+	frameImageLoading                            bool
+	frameImageCancel                             context.CancelFunc
+	frameImageGen                                int
+	previousFrame, nextFrame, startHere, endHere *gtk.Button
+	frameClock                                   *frameClock
+	frames                                       frameWindow
+	frameAnchor                                  time.Duration
+	frameSteps, frameAction, frameGen            int
+	frameLoading, framePending                   bool
+	frameCancel                                  context.CancelFunc
+	history                                      trimHistory
+	undo, redo                                   *gtk.Button
+	file, mode, returnPage                       string
+	info                                         MediaInfo
+	video                                        *gtk.Video
+	media                                        *gtk.MediaFile
+	timeline                                     *gtk.DrawingArea
+	thumbs                                       []*gtk.Picture
+	start, end                                   *gtk.SpinButton
+	keep                                         *gtk.ToggleButton
+	play                                         *gtk.Button
+	preview                                      *gtk.Button
+	save                                         *gtk.Button
+	back                                         *gtk.Button
+	reset                                        *gtk.Button
+	controls                                     *gtk.Box
+	progress                                     *gtk.ProgressBar
+	caption                                      *gtk.Label
+	position                                     *gtk.Label
+	name                                         *gtk.Label
+	status                                       *gtk.Label
+	selection                                    trimSelection
+	syncing                                      bool
+	previewing                                   bool
+	segment                                      int
+	playhead                                     time.Duration
+	seekTarget                                   time.Duration
+	seekQueued                                   bool
+	lastSeek                                     time.Time
+	playOnSeek                                   bool
+	timer                                        glib.SourceHandle
+	cancel                                       context.CancelFunc
+	export                                       context.CancelFunc
+	done                                         chan struct{}
+	gen                                          int
 }
 
 func (a *app) buildTrim() *gtk.Box {
@@ -69,9 +83,20 @@ func (a *app) buildTrim() *gtk.Box {
 	page.Append(t.name)
 	t.video = gtk.NewVideo()
 	t.video.SetSizeRequest(480, 270)
+	t.video.SetFocusable(true)
+	t.video.AddController(a.trimFrameKeys())
 	t.video.AddCSSClass("er-frame")
 	t.video.SetOverflow(gtk.OverflowHidden)
-	page.Append(t.video)
+	t.display = gtk.NewStack()
+	t.display.SetSizeRequest(480, 270)
+	t.display.AddNamed(t.video, "video")
+	t.frameImage = gtk.NewPicture()
+	t.frameImage.SetCanShrink(true)
+	t.frameImage.SetContentFit(gtk.ContentFitContain)
+	t.frameImage.SetFocusable(true)
+	t.frameImage.AddController(a.trimFrameKeys())
+	t.display.AddNamed(t.frameImage, "frame")
+	page.Append(t.display)
 
 	t.controls = gtk.NewBox(gtk.OrientationVertical, 10)
 	modes := gtk.NewBox(gtk.OrientationHorizontal, 0)
@@ -117,10 +142,25 @@ func (a *app) buildTrim() *gtk.Box {
 			if t.syncing {
 				return
 			}
-			t.selection.start = time.Duration(t.start.Value() * float64(time.Second))
-			t.selection.end = time.Duration(t.end.Value() * float64(time.Second))
+			previous := t.selection.start
+			if spin == t.end {
+				previous = t.selection.end
+			}
+			at := time.Duration(spin.Value() * float64(time.Second))
+			// SpinButton reparses its rounded display when focus leaves
+			if at == previous.Round(time.Millisecond) && at != previous {
+				t.syncing = true
+				spin.SetValue(previous.Seconds())
+				t.syncing = false
+				return
+			}
+			if spin == t.start {
+				t.selection.start = at
+			} else {
+				t.selection.end = at
+			}
 			a.updateTrim()
-			at := t.selection.start
+			at = t.selection.start
 			if spin == t.end {
 				at = t.selection.end
 			}
@@ -149,6 +189,22 @@ func (a *app) buildTrim() *gtk.Box {
 	t.position.SetXAlign(1)
 	playback.Append(t.position)
 	t.controls.Append(playback)
+	frames := gtk.NewBox(gtk.OrientationHorizontal, 8)
+	t.previousFrame = gtk.NewButtonWithLabel("Previous frame")
+	t.previousFrame.SetTooltipText("Previous frame (Left)")
+	t.previousFrame.ConnectClicked(func() { a.stepTrimFrame(-1) })
+	frames.Append(t.previousFrame)
+	t.nextFrame = gtk.NewButtonWithLabel("Next frame")
+	t.nextFrame.SetTooltipText("Next frame (Right)")
+	t.nextFrame.ConnectClicked(func() { a.stepTrimFrame(1) })
+	frames.Append(t.nextFrame)
+	t.startHere = gtk.NewButtonWithLabel("Start here")
+	t.startHere.ConnectClicked(func() { a.markTrimFrame(false) })
+	frames.Append(t.startHere)
+	t.endHere = gtk.NewButtonWithLabel("End here")
+	t.endHere.ConnectClicked(func() { a.markTrimFrame(true) })
+	frames.Append(t.endHere)
+	t.controls.Append(frames)
 	t.caption = label("", "caption")
 	t.caption.SetWrap(true)
 	t.controls.Append(t.caption)
@@ -280,32 +336,7 @@ func (a *app) buildTrimTimeline() *gtk.Overlay {
 	drag.ConnectDragEnd(func(_, _ float64) { finishDrag() })
 	drag.ConnectCancel(func(_ *gdk.EventSequence) { finishDrag() })
 	t.timeline.AddController(drag)
-	key := gtk.NewEventControllerKey()
-	key.ConnectKeyPressed(func(keyval, _ uint, mods gdk.ModifierType) bool {
-		if t.media == nil {
-			return false
-		}
-		step := 100 * time.Millisecond
-		if mods&gdk.ShiftMask != 0 {
-			step = time.Second
-		}
-		at := t.playhead
-		switch keyval {
-		case gdk.KEY_Left:
-			at -= step
-		case gdk.KEY_Right:
-			at += step
-		case gdk.KEY_Home:
-			at = 0
-		case gdk.KEY_End:
-			at = t.selection.duration
-		default:
-			return false
-		}
-		a.seekTrim(at)
-		return true
-	})
-	t.timeline.AddController(key)
+	t.timeline.AddController(a.trimFrameKeys())
 	return track
 }
 
@@ -391,7 +422,7 @@ func (a *app) openTrimSource(file string, info MediaInfo, mode, returnPage strin
 	}
 	media := t.media
 	showPreviewError := func() {
-		if t.media == media && media.Error() != nil {
+		if t.media == media && trimMediaError(media) != nil {
 			t.status.SetText("The video preview could not be opened. Please check that GTK media support and the recording's codecs are installed.")
 			t.status.SetVisible(true)
 		}
@@ -410,6 +441,7 @@ func (a *app) openTrimSource(file string, info MediaInfo, mode, returnPage strin
 }
 
 func (a *app) updateTrim() {
+	a.cancelTrimFrameNavigation()
 	t := &a.trim
 	if t.media != nil {
 		t.media.Pause()
@@ -444,6 +476,8 @@ func trimClock(d time.Duration) string {
 }
 
 func (a *app) seekTrim(at time.Duration) {
+	a.cancelTrimFrameImage()
+	a.cancelTrimFrameNavigation()
 	t := &a.trim
 	if t.media == nil || !t.media.IsSeekable() {
 		return
@@ -457,6 +491,8 @@ func (a *app) seekTrim(at time.Duration) {
 }
 
 func (a *app) toggleTrimPlayback() {
+	a.cancelTrimFrameImage()
+	a.cancelTrimFrameNavigation()
 	t := &a.trim
 	if t.media == nil || t.export != nil || !t.media.IsPrepared() {
 		return
@@ -467,7 +503,7 @@ func (a *app) toggleTrimPlayback() {
 		t.media.Pause()
 	case t.seekQueued || t.media.IsSeeking():
 		t.playOnSeek = true
-	case t.media.Ended():
+	case t.media.Ended() || t.playhead >= t.selection.duration-time.Millisecond:
 		a.seekTrim(0)
 		t.playOnSeek = true
 	default:
@@ -498,7 +534,8 @@ func (a *app) tickTrim() bool {
 	if t.export == nil && t.seekQueued && !t.media.IsSeeking() && time.Since(t.lastSeek) >= 80*time.Millisecond {
 		t.seekQueued = false
 		t.lastSeek = time.Now()
-		t.media.Seek(t.seekTarget.Microseconds())
+		// A seek on an exact PTS can display the preceding VFR frame
+		t.media.Seek(t.seekTarget.Microseconds() + 1)
 	}
 	if t.playOnSeek && !t.seekQueued && !t.media.IsSeeking() {
 		t.playOnSeek = false
@@ -507,6 +544,12 @@ func (a *app) tickTrim() bool {
 	seeking := t.seekQueued || t.media.IsSeeking()
 	if !seeking {
 		t.playhead = time.Duration(t.media.Timestamp()) * time.Microsecond
+	}
+	if t.frameImageLoading || (t.display != nil && t.display.VisibleChildName() == "frame") {
+		t.playhead = t.frameImageAt
+	}
+	if !t.previewing && !seeking && t.media.Playing() && t.playhead >= t.selection.duration {
+		t.media.Pause()
 	}
 	if t.media.Ended() && !seeking {
 		t.previewing = false
@@ -529,9 +572,10 @@ func (a *app) tickTrim() bool {
 	if t.media.Playing() || t.playOnSeek {
 		t.play.SetLabel("Pause")
 	}
-	t.play.SetSensitive(t.media.IsPrepared() && t.media.Error() == nil)
+	t.play.SetSensitive(t.media.IsPrepared() && trimMediaError(t.media) == nil)
 	segments, err := t.selection.segments()
-	t.preview.SetSensitive(err == nil && len(segments) > 0 && t.media.IsSeekable() && t.media.Error() == nil)
+	t.preview.SetSensitive(err == nil && len(segments) > 0 && t.media.IsSeekable() && trimMediaError(t.media) == nil)
+	a.syncTrimFrameControls()
 	t.position.SetText(trimClock(t.playhead) + " / " + trimClock(t.selection.duration))
 	t.timeline.QueueDraw()
 	return true
@@ -569,7 +613,10 @@ func (a *app) loadTrimThumbnails(ctx context.Context) {
 }
 
 func (a *app) stopTrim() {
+	a.cancelTrimFrameImage()
+	a.cancelTrimFrameNavigation()
 	t := &a.trim
+	t.frameClock, t.frames = nil, frameWindow{}
 	t.gen++
 	t.seekQueued, t.playOnSeek = false, false
 	if t.cancel != nil {
@@ -606,6 +653,7 @@ func (a *app) leaveTrim() {
 }
 
 func (a *app) saveTrim() {
+	a.cancelTrimFrameNavigation()
 	t := &a.trim
 	if t.export != nil {
 		return
@@ -706,6 +754,12 @@ func (a *app) restoreTrimEdit(redo bool) {
 	t.syncing = false
 	a.updateTrim()
 	a.seekTrim(s.start)
+	if len(t.frames.times) > 0 {
+		i := t.frames.index(s.start)
+		if t.frames.times[i] == s.start && (i+1 < len(t.frames.times) || t.frames.last) {
+			a.loadTrimFrameImage(s.start)
+		}
+	}
 }
 
 func (a *app) trimHistoryShortcut(key uint, mods gdk.ModifierType) bool {
