@@ -94,16 +94,6 @@ add Copy image and Edit, which opens [Satty](https://github.com/gabm/satty)
 and reloads the preview on save. New recording, New screenshot or Escape goes
 back to the setup page.
 
-### About and sponsoring
-
-Two buttons sit at the right of the dialogue's header bar. The information
-button opens the About window, which names the proprietor, the version in
-service and the tools on which the establishment depends. The heart beside it,
-kept a decorous pink, leads to the
-[author's sponsorship page](https://github.com/sponsors/chmouel) for those
-moved to contribute to the upkeep of an establishment whose glass, as ever,
-remains empty.
-
 ## Install
 
 You can install a package or build from source.
