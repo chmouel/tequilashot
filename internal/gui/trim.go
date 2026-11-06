@@ -58,14 +58,9 @@ func trimSeconds(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', 9, 64)
 }
 
-// snapTrimSelection moves the in and out points onto source frames before the
-// kept spans are worked out, so both streams share one origin and a cut removes
-// only whole frames.
-func snapTrimSelection(ctx context.Context, source string, selection trimSelection) (trimSelection, error) {
-	clock, err := probeFrameClock(ctx, source)
-	if err != nil {
-		return selection, err
-	}
+// snapTrimSelection moves the in and out points onto source frames, so a cut
+// removes only whole frames and the two streams are cut at the same instants.
+func snapTrimSelection(ctx context.Context, source string, clock *frameClock, selection trimSelection) (trimSelection, error) {
 	start, err := snapFrameTime(ctx, source, clock, selection.start, selection.duration)
 	if err != nil {
 		return selection, err
@@ -82,6 +77,31 @@ func snapTrimSelection(ctx context.Context, source string, selection trimSelecti
 	}
 	selection.start, selection.end = start, end
 	return selection, nil
+}
+
+// snapTrimSegments puts both ends of every kept span on a source frame, the
+// prefix and suffix a cut leaves aside included: each span starts where its
+// first picture starts, so sound and picture stay together even when the
+// recording's picture starts late. A span holding no whole frame is dropped.
+func snapTrimSegments(ctx context.Context, source string, clock *frameClock, segments []trimSegment, duration time.Duration) ([]trimSegment, error) {
+	kept := make([]trimSegment, 0, len(segments))
+	for _, segment := range segments {
+		start, err := snapFrameTime(ctx, source, clock, segment.start, duration)
+		if err != nil {
+			return nil, err
+		}
+		end, err := snapFrameTime(ctx, source, clock, segment.end, duration)
+		if err != nil {
+			return nil, err
+		}
+		if start < end {
+			kept = append(kept, trimSegment{start, end})
+		}
+	}
+	if len(kept) == 0 {
+		return nil, errors.New("the selection leaves no whole frame to save")
+	}
+	return kept, nil
 }
 
 func trimFilters(segments []trimSegment, audio bool) string {
@@ -129,11 +149,19 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 	if _, err := selection.segments(); err != nil {
 		return "", MediaInfo{}, err
 	}
-	selection, err := snapTrimSelection(ctx, source, selection)
+	clock, err := probeFrameClock(ctx, source)
+	if err != nil {
+		return "", MediaInfo{}, err
+	}
+	selection, err = snapTrimSelection(ctx, source, clock, selection)
 	if err != nil {
 		return "", MediaInfo{}, err
 	}
 	segments, err := selection.segments()
+	if err != nil {
+		return "", MediaInfo{}, err
+	}
+	segments, err = snapTrimSegments(ctx, source, clock, segments, selection.duration)
 	if err != nil {
 		return "", MediaInfo{}, err
 	}

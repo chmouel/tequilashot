@@ -344,6 +344,21 @@ func TestExportTrimDelayedPicture(t *testing.T) {
 	if math.Abs((audio - video).Seconds()) > 0.02 {
 		t.Fatalf("video lasts %s but audio lasts %s; the delayed picture was not held to the sound", video, audio)
 	}
+
+	// Cutting a middle section keeps a prefix whose own start is implicit, and
+	// that prefix must be held together just as the selection is.
+	path, _, err = exportTrim(ctx, source, trimSelection{time.Second, 2 * time.Second, 4 * time.Second, true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	durations = trimStreamDurations(t, path)
+	video, audio = durations["video"], durations["audio"]
+	if math.Abs((video - 2700*time.Millisecond).Seconds()) > 0.03 {
+		t.Fatalf("cut video lasts %s; expected the retained pictures for 2.7s", video)
+	}
+	if math.Abs((audio - video).Seconds()) > 0.02 {
+		t.Fatalf("cut video lasts %s but its audio lasts %s; the retained prefix lost its sync", video, audio)
+	}
 }
 
 func TestExportTrimCollapsedToFrame(t *testing.T) {
