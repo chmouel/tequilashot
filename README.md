@@ -181,18 +181,25 @@ add Copy image and Edit, which opens [Satty](https://github.com/gabm/satty)
 and reloads the preview on save. New recording, New screenshot or Escape goes
 back to the setup page.
 
+<p align="center">
+  <img src=".github/screenshots/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles" width="60%">
+</p>
+
 Open an existing local video with Open video, or drop one onto the idle window.
 Recordings and saved replays also offer Trim. Drag the two timeline handles
-to select a section, or enter precise start and end times in seconds. Keep
-selection saves that section; Remove selection cuts it out and joins the
-remaining footage. Preview edit plays the result before saving. Preview cut
-plays briefly across a removal; Preview start and Preview end check the edges
-of a kept selection. Each short preview stops automatically. Click the
-timeline to seek, or use Previous frame and Next frame. Left and Right step
-one frame whilst the video or timeline has focus; hold Shift to jump one second.
-Start here and End here include the displayed frame in the selection. Space plays or pauses. Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z) restore edits;
-Reset restores the full selection and Back or
-Escape returns to the previous page.
+to select a section, or enter precise start and end times in seconds.
+
+Keep saves the selected section; Cut removes it and joins the remaining
+footage. Preview plays the result before saving, and the icons beside it
+preview the first moments of a kept selection, the last moments before its
+end, or the join left by a cut. Each short preview stops automatically. Click
+the timeline to seek, or step one frame at a time with the chevrons beside
+Play. Left and Right also step one frame whilst the video or timeline has
+focus; hold Shift to jump one second. In and Out set the selection boundary
+at the displayed frame. The timecode beside them follows the playhead. Space
+plays or pauses. Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z) restore edits, and the
+refresh button restores the full selection. Back or Escape returns to the
+previous page.
 
 Save copy creates a uniquely named `-trimmed.mp4` beside the original, which
 is kept. Saving shows progress and can be cancelled.

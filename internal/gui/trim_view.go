@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/cairo"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -74,21 +76,116 @@ type trimView struct {
 	gen                                          int
 }
 
+// trimIconButton builds an icon-only button; name labels it for assistive
+// technology
+func trimIconButton(icon, name, tooltip string, clicked func()) *gtk.Button {
+	b := gtk.NewButtonFromIconName(icon)
+	b.SetTooltipText(tooltip)
+	b.UpdateProperty([]gtk.AccessibleProperty{gtk.AccessiblePropertyLabel},
+		[]coreglib.Value{*coreglib.NewValue(name)})
+	b.ConnectClicked(clicked)
+	return b
+}
+
+func trimFlatIconButton(icon, name, tooltip string, clicked func()) *gtk.Button {
+	b := trimIconButton(icon, name, tooltip, clicked)
+	b.AddCSSClass("flat")
+	return b
+}
+
+func trimLabeledButton(icon, text, tooltip string, clicked func()) *gtk.Button {
+	b := gtk.NewButton()
+	content := adw.NewButtonContent()
+	content.SetIconName(icon)
+	content.SetLabel(text)
+	b.SetChild(content)
+	b.SetTooltipText(tooltip)
+	b.ConnectClicked(clicked)
+	return b
+}
+
+func trimModeToggle(icon, text, tooltip string) *gtk.ToggleButton {
+	b := gtk.NewToggleButton()
+	content := adw.NewButtonContent()
+	content.SetIconName(icon)
+	content.SetLabel(text)
+	b.SetChild(content)
+	b.SetTooltipText(tooltip)
+	return b
+}
+
+// trimPlainStage drops the player's own controls, which would cover the picture
+// and repeat the deck below it
+func trimPlainStage(video *gtk.Video) {
+	overlay, ok := video.FirstChild().(*gtk.Overlay)
+	if !ok {
+		return
+	}
+	for child := overlay.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+		stage := gtk.BaseWidget(child)
+		if stage.CSSName() == "graphicsoffload" || stage.CSSName() == "picture" {
+			continue
+		}
+		stage.SetCanTarget(false)
+		stage.SetOpacity(0)
+	}
+}
+
+// setPlayLabel keeps the play button's glyph and accessible name in step with
+// playback, and falls back to a plain label for a button without an icon
+func setPlayLabel(play *gtk.Button, label, icon string) {
+	if play.IconName() == "" {
+		if play.Label() != label {
+			play.SetLabel(label)
+		}
+		return
+	}
+	if play.IconName() == icon {
+		return
+	}
+	play.SetIconName(icon)
+	play.UpdateProperty([]gtk.AccessibleProperty{gtk.AccessiblePropertyLabel}, []coreglib.Value{*coreglib.NewValue(label)})
+}
+
 func (a *app) buildTrim() *gtk.Box {
 	t := &a.trim
 	page := gtk.NewBox(gtk.OrientationVertical, 10)
 	page.SetMarginStart(18)
 	page.SetMarginEnd(18)
 	page.SetMarginBottom(18)
+
+	header := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	t.name = label("", "heading")
 	t.name.SetEllipsize(pango.EllipsizeMiddle)
-	page.Append(t.name)
+	t.name.SetHExpand(true)
+	header.Append(t.name)
+	history := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	history.AddCSSClass("linked")
+	t.undo = trimFlatIconButton("edit-undo-symbolic", "Undo", "Undo the last edit (Ctrl+Z)", func() { a.restoreTrimEdit(false) })
+	t.redo = trimFlatIconButton("edit-redo-symbolic", "Redo", "Redo the last edit (Ctrl+Shift+Z)", func() { a.restoreTrimEdit(true) })
+	t.reset = trimFlatIconButton("view-refresh-symbolic", "Reset selection", "Select the whole recording again", func() {
+		if t.export != nil {
+			return
+		}
+		a.commitTrimEdit()
+		t.selection.start, t.selection.end = 0, t.selection.duration
+		a.updateTrim()
+		a.seekTrim(0)
+		a.commitTrimEdit()
+	})
+	history.Append(t.undo)
+	history.Append(t.redo)
+	history.Append(t.reset)
+	header.Append(history)
+	page.Append(header)
+
 	t.video = gtk.NewVideo()
 	t.video.SetSizeRequest(480, 270)
 	t.video.SetFocusable(true)
 	t.video.AddController(a.trimFrameKeys())
 	t.video.AddCSSClass("er-frame")
 	t.video.SetOverflow(gtk.OverflowHidden)
+	trimPlainStage(t.video)
 	t.display = gtk.NewStack()
 	t.display.SetSizeRequest(480, 270)
 	t.display.AddNamed(t.video, "video")
@@ -100,12 +197,57 @@ func (a *app) buildTrim() *gtk.Box {
 	t.display.AddNamed(t.frameImage, "frame")
 	page.Append(t.display)
 
-	t.controls = gtk.NewBox(gtk.OrientationVertical, 10)
+	t.controls = gtk.NewBox(gtk.OrientationVertical, 8)
+
+	deck := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	t.play = trimIconButton("media-playback-start-symbolic", "Play", "Play or pause (Space)", a.toggleTrimPlayback)
+	t.play.AddCSSClass("circular")
+	deck.Append(t.play)
+
+	steps := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	steps.AddCSSClass("linked")
+	t.previousFrame = trimIconButton("go-previous-symbolic", "Previous frame", "Step back one frame (Left)", func() { a.stepTrimFrame(-1) })
+	t.nextFrame = trimIconButton("go-next-symbolic", "Next frame", "Step forward one frame (Right)", func() { a.stepTrimFrame(1) })
+	steps.Append(t.previousFrame)
+	steps.Append(t.nextFrame)
+	deck.Append(steps)
+
+	marks := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	marks.AddCSSClass("linked")
+	t.startHere = trimLabeledButton("selection-start-symbolic", "In", "Set the selection start at the frame on show", func() { a.markTrimFrame(false) })
+	t.endHere = trimLabeledButton("selection-end-symbolic", "Out", "Set the selection end after the frame on show", func() { a.markTrimFrame(true) })
+	marks.Append(t.startHere)
+	marks.Append(t.endHere)
+	deck.Append(marks)
+
+	shorts := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	shorts.AddCSSClass("linked")
+	t.preview = trimLabeledButton("view-reveal-symbolic", "Preview", "Preview the trimmed result", a.previewTrim)
+	shorts.Append(t.preview)
+	t.shortStart = trimIconButton("media-skip-backward-symbolic", "Preview start", "Preview the first 2 seconds from selection start", func() { a.startTrimPreview(trimPreviewStart) })
+	shorts.Append(t.shortStart)
+	t.shortEnd = trimIconButton("media-skip-forward-symbolic", "Preview end", "Preview the last 2 seconds before selection end", func() { a.startTrimPreview(trimPreviewEnd) })
+	shorts.Append(t.shortEnd)
+	t.shortCut = trimIconButton("edit-cut-symbolic", "Preview cut", "Preview across the splice point", func() { a.startTrimPreview(trimPreviewCut) })
+	shorts.Append(t.shortCut)
+
+	spacer := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	spacer.SetHExpand(true)
+	deck.Append(spacer)
+	t.position = label("", "caption", "dim-label", "numeric", "monospace")
+	t.position.SetXAlign(1)
+	deck.Append(t.position)
+	t.controls.Append(deck)
+
+	t.controls.Append(a.buildTrimTimeline())
+
+	selection := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	selection.AddCSSClass("er-selection")
 	modes := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	modes.AddCSSClass("linked")
-	modes.SetHAlign(gtk.AlignCenter)
-	t.keep = gtk.NewToggleButtonWithLabel("Keep selection")
-	remove := gtk.NewToggleButtonWithLabel("Remove selection")
+	modes.SetHAlign(gtk.AlignStart)
+	t.keep = trimModeToggle("object-select-symbolic", "Keep", "Save the selected span and discard the rest")
+	remove := trimModeToggle("edit-cut-symbolic", "Cut", "Discard the selected span and join the rest")
 	remove.SetGroup(t.keep)
 	t.keep.SetActive(true)
 	t.keep.ConnectToggled(func() {
@@ -119,22 +261,22 @@ func (a *app) buildTrim() *gtk.Box {
 	})
 	modes.Append(t.keep)
 	modes.Append(remove)
-	t.controls.Append(modes)
-	t.controls.Append(a.buildTrimTimeline())
-
-	times := gtk.NewBox(gtk.OrientationHorizontal, 12)
-	times.SetHomogeneous(true)
-	for i, title := range []string{"Start (seconds)", "End (seconds)"} {
-		col := gtk.NewBox(gtk.OrientationVertical, 4)
-		caption := label(title, "caption")
-		caption.SetXAlign(0)
-		col.Append(caption)
+	selection.Append(modes)
+	gap := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	gap.SetHExpand(true)
+	selection.Append(gap)
+	for i, title := range []string{"Start", "End"} {
+		group := gtk.NewBox(gtk.OrientationHorizontal, 2)
+		caption := label(title, "caption", "dim-label")
+		caption.SetTooltipText(title + " of the selection, in seconds")
+		group.Append(caption)
 		spin := gtk.NewSpinButtonWithRange(0, 1, 0.1)
 		spin.SetDigits(3)
-		spin.SetTooltipText(title + "; use the arrows or enter a precise time")
-		spin.SetHExpand(true)
-		col.Append(spin)
-		times.Append(col)
+		spin.SetWidthChars(6)
+		spin.AddCSSClass("numeric")
+		spin.SetTooltipText(title + " in seconds; use the arrows or enter a precise time")
+		group.Append(spin)
+		selection.Append(group)
 		if i == 0 {
 			t.start = spin
 		} else {
@@ -176,51 +318,16 @@ func (a *app) buildTrim() *gtk.Box {
 		focus.ConnectLeave(func() { spin.Update(); a.commitTrimEdit() })
 		spin.AddController(focus)
 	}
-	t.controls.Append(times)
+	t.controls.Append(selection)
 
-	playback := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	t.play = gtk.NewButtonWithLabel("Play")
-	t.play.SetTooltipText("Play or pause (Space)")
-	t.play.ConnectClicked(a.toggleTrimPlayback)
-	playback.Append(t.play)
-	t.preview = gtk.NewButtonWithLabel("Preview edit")
-	t.preview.ConnectClicked(a.previewTrim)
-	playback.Append(t.preview)
-	t.position = label("", "caption", "dim-label")
-	t.position.SetHExpand(true)
-	t.position.SetXAlign(1)
-	playback.Append(t.position)
-	t.controls.Append(playback)
-	edges := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	t.shortStart = gtk.NewButtonWithLabel("Preview start")
-	t.shortStart.ConnectClicked(func() { a.startTrimPreview(trimPreviewStart) })
-	edges.Append(t.shortStart)
-	t.shortEnd = gtk.NewButtonWithLabel("Preview end")
-	t.shortEnd.ConnectClicked(func() { a.startTrimPreview(trimPreviewEnd) })
-	edges.Append(t.shortEnd)
-	t.shortCut = gtk.NewButtonWithLabel("Preview cut")
-	t.shortCut.ConnectClicked(func() { a.startTrimPreview(trimPreviewCut) })
-	edges.Append(t.shortCut)
-	t.controls.Append(edges)
-	frames := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	t.previousFrame = gtk.NewButtonWithLabel("Previous frame")
-	t.previousFrame.SetTooltipText("Previous frame (Left)")
-	t.previousFrame.ConnectClicked(func() { a.stepTrimFrame(-1) })
-	frames.Append(t.previousFrame)
-	t.nextFrame = gtk.NewButtonWithLabel("Next frame")
-	t.nextFrame.SetTooltipText("Next frame (Right)")
-	t.nextFrame.ConnectClicked(func() { a.stepTrimFrame(1) })
-	frames.Append(t.nextFrame)
-	t.startHere = gtk.NewButtonWithLabel("Start here")
-	t.startHere.ConnectClicked(func() { a.markTrimFrame(false) })
-	frames.Append(t.startHere)
-	t.endHere = gtk.NewButtonWithLabel("End here")
-	t.endHere.ConnectClicked(func() { a.markTrimFrame(true) })
-	frames.Append(t.endHere)
-	t.controls.Append(frames)
-	t.caption = label("", "caption")
-	t.caption.SetWrap(true)
-	t.controls.Append(t.caption)
+	previews := gtk.NewBox(gtk.OrientationHorizontal, 8)
+	previews.Append(shorts)
+	t.caption = label("", "caption", "dim-label", "numeric")
+	t.caption.SetEllipsize(pango.EllipsizeEnd)
+	t.caption.SetHExpand(true)
+	t.caption.SetXAlign(1)
+	previews.Append(t.caption)
+	t.controls.Append(previews)
 	page.Append(t.controls)
 
 	t.status = label("", "caption", "dim-label")
@@ -232,8 +339,7 @@ func (a *app) buildTrim() *gtk.Box {
 	t.progress.SetVisible(false)
 	page.Append(t.progress)
 	footer := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	t.back = gtk.NewButtonWithLabel("Back")
-	t.back.ConnectClicked(func() {
+	t.back = trimLabeledButton("go-previous-symbolic", "Back", "Leave the trimmer", func() {
 		if t.export != nil {
 			t.export()
 			t.back.SetSensitive(false)
@@ -243,33 +349,11 @@ func (a *app) buildTrim() *gtk.Box {
 		a.leaveTrim()
 	})
 	footer.Append(t.back)
-	t.reset = gtk.NewButtonWithLabel("Reset")
-	t.reset.ConnectClicked(func() {
-		if t.export != nil {
-			return
-		}
-		a.commitTrimEdit()
-		t.selection.start, t.selection.end = 0, t.selection.duration
-		a.updateTrim()
-		a.seekTrim(0)
-		a.commitTrimEdit()
-	})
-	footer.Append(t.reset)
-	t.undo = gtk.NewButtonWithLabel("Undo")
-	t.undo.SetTooltipText("Undo the last edit (Ctrl+Z)")
-	t.undo.ConnectClicked(func() { a.restoreTrimEdit(false) })
-	footer.Append(t.undo)
-	t.redo = gtk.NewButtonWithLabel("Redo")
-	t.redo.SetTooltipText("Redo the last edit (Ctrl+Shift+Z)")
-	t.redo.ConnectClicked(func() { a.restoreTrimEdit(true) })
-	footer.Append(t.redo)
-	spacer := gtk.NewBox(gtk.OrientationHorizontal, 0)
-	spacer.SetHExpand(true)
-	footer.Append(spacer)
-	t.save = gtk.NewButtonWithLabel("Save copy")
+	slack := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	slack.SetHExpand(true)
+	footer.Append(slack)
+	t.save = trimLabeledButton("document-save-symbolic", "Save copy", "Save beside the original, which is kept", a.saveTrim)
 	t.save.AddCSSClass("suggested-action")
-	t.save.SetTooltipText("Save beside the original, which is kept")
-	t.save.ConnectClicked(a.saveTrim)
 	footer.Append(t.save)
 	page.Append(footer)
 	return page
@@ -295,7 +379,7 @@ func (a *app) buildTrimTimeline() *gtk.Overlay {
 	track.AddCSSClass("er-frame")
 	track.SetChild(strip)
 	t.timeline = gtk.NewDrawingArea()
-	t.timeline.SetContentHeight(76)
+	t.timeline.SetContentHeight(72)
 	t.timeline.SetFocusable(true)
 	t.timeline.SetTooltipText("Drag the handles to select a section; click elsewhere to seek")
 	t.timeline.SetDrawFunc(a.drawTrimTimeline)
@@ -361,6 +445,19 @@ func (a *app) trimTimeAt(x float64) time.Duration {
 	return time.Duration(max(0, min(1, (x-10)/w)) * float64(a.trim.selection.duration))
 }
 
+func trimRoundRect(cr *cairo.Context, x, y, width, height, radius float64) {
+	if width <= 0 || height <= 0 {
+		return
+	}
+	radius = math.Min(radius, math.Min(width, height)/2)
+	cr.NewSubPath()
+	cr.Arc(x+width-radius, y+radius, radius, -math.Pi/2, 0)
+	cr.Arc(x+width-radius, y+height-radius, radius, 0, math.Pi/2)
+	cr.Arc(x+radius, y+height-radius, radius, math.Pi/2, math.Pi)
+	cr.Arc(x+radius, y+radius, radius, math.Pi, 3*math.Pi/2)
+	cr.ClosePath()
+}
+
 func (a *app) drawTrimTimeline(_ *gtk.DrawingArea, cr *cairo.Context, width, height int) {
 	t := &a.trim
 	d := float64(t.selection.duration)
@@ -369,37 +466,50 @@ func (a *app) drawTrimTimeline(_ *gtk.DrawingArea, cr *cairo.Context, width, hei
 	}
 	w, h := float64(width-20), float64(height)
 	x1, x2 := 10+w*float64(t.selection.start)/d, 10+w*float64(t.selection.end)/d
-	cr.SetSourceRGBA(0, 0, 0, 0.7)
+	top, bottom := 7.0, h-7
+	radius := 8.0
+	red, green, blue := 0.48, 0.79, 1.0
 	if t.selection.remove {
-		cr.Rectangle(x1, 8, x2-x1, h-16)
+		red, green, blue = 1, 0.54, 0.5
+	}
+
+	// The mask follows the mode, dimming the footage the edit drops
+	cr.SetSourceRGBA(0, 0, 0, 0.62)
+	if t.selection.remove {
+		trimRoundRect(cr, x1, top+1, x2-x1, bottom-top-2, radius)
 	} else {
-		cr.Rectangle(10, 8, x1-10, h-16)
-		cr.Rectangle(x2, 8, float64(width)-10-x2, h-16)
+		trimRoundRect(cr, 10, top+1, x1-10, bottom-top-2, radius)
+		trimRoundRect(cr, x2, top+1, 10+w-x2, bottom-top-2, radius)
 	}
 	cr.Fill()
-	if t.selection.remove {
-		cr.SetSourceRGBA(1, 0.54, 0.5, 1)
-	} else {
-		cr.SetSourceRGBA(0.48, 0.79, 1, 1)
-	}
+
+	cr.SetSourceRGBA(red, green, blue, 1)
 	cr.SetLineWidth(2)
-	cr.Rectangle(x1, 7, x2-x1, h-14)
+	trimRoundRect(cr, x1+1, top+1, x2-x1-2, bottom-top-2, radius)
 	cr.Stroke()
+
 	for _, x := range []float64{x1, x2} {
-		cr.Rectangle(x-5, 4, 10, h-8)
+		cr.SetSourceRGBA(red, green, blue, 1)
+		trimRoundRect(cr, x-6, top-2, 12, bottom-top+4, 6)
 		cr.Fill()
+		cr.SetSourceRGBA(0.06, 0.11, 0.17, 0.55)
+		cr.SetLineWidth(1.2)
+		for i := -1; i <= 1; i++ {
+			cr.MoveTo(x+float64(i)*3, h/2-6)
+			cr.LineTo(x+float64(i)*3, h/2+6)
+		}
+		cr.Stroke()
 	}
-	cr.SetSourceRGBA(0.08, 0.12, 0.18, 1)
-	for _, x := range []float64{x1, x2} {
-		cr.Rectangle(x-1, h/2-8, 2, 16)
-		cr.Fill()
-	}
+
 	if t.media != nil {
 		x := 10 + w*float64(t.playhead)/d
 		cr.SetSourceRGBA(1, 1, 1, 1)
-		cr.SetLineWidth(2)
-		cr.MoveTo(x, 0)
-		cr.LineTo(x, h)
+		trimRoundRect(cr, x-4, 1, 8, 6, 3)
+		cr.Fill()
+		cr.SetLineWidth(1.5)
+		cr.SetLineCap(cairo.LineCapRound)
+		cr.MoveTo(x, 5)
+		cr.LineTo(x, h-4)
 		cr.Stroke()
 	}
 }
@@ -586,10 +696,11 @@ func (a *app) tickTrim() bool {
 			}
 		}
 	}
-	t.play.SetLabel("Play")
+	label, icon := "Play", "media-playback-start-symbolic"
 	if t.media.Playing() || t.playOnSeek {
-		t.play.SetLabel("Pause")
+		label, icon = "Pause", "media-playback-pause-symbolic"
 	}
+	setPlayLabel(t.play, label, icon)
 	t.play.SetSensitive(t.media.IsPrepared() && trimMediaError(t.media) == nil)
 	segments, err := t.selection.segments()
 	t.preview.SetSensitive(err == nil && len(segments) > 0 && t.media.IsSeekable() && trimMediaError(t.media) == nil)
@@ -695,7 +806,12 @@ func (a *app) saveTrim() {
 	t.video.SetSensitive(false)
 	t.reset.SetSensitive(false)
 	t.save.SetSensitive(false)
-	t.back.SetLabel("Cancel")
+	if content, ok := t.back.Child().(*adw.ButtonContent); ok {
+		content.SetLabel("Cancel")
+		content.SetIconName("window-close-symbolic")
+	} else {
+		t.back.SetLabel("Cancel")
+	}
 	t.progress.SetFraction(0)
 	t.progress.SetText("Saving copy…")
 	t.progress.SetVisible(true)
@@ -722,7 +838,12 @@ func (a *app) saveTrim() {
 			t.video.SetSensitive(true)
 			t.reset.SetSensitive(true)
 			t.back.SetSensitive(true)
-			t.back.SetLabel("Back")
+			if content, ok := t.back.Child().(*adw.ButtonContent); ok {
+				content.SetLabel("Back")
+				content.SetIconName("go-previous-symbolic")
+			} else {
+				t.back.SetLabel("Back")
+			}
 			t.progress.SetVisible(false)
 			a.updateTrim()
 			if err != nil {

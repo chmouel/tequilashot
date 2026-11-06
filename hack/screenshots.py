@@ -19,14 +19,14 @@ import tempfile
 import time
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / ".github" / "screenshots"
 APP_CLASS = "com.chmouel.Tequilashot.Recorder"
 CLIP = "recording-20261105-13h04.mp4"
 WINDOW_RADIUS = 14
-PAGES = ("monitor", "camera-circle", "window", "result", "screenshot", "screenshot-result", "about")
+PAGES = ("monitor", "camera-circle", "window", "result", "screenshot", "screenshot-result", "trim", "about")
 
 
 def font(size, weight="Bold"):
@@ -213,6 +213,9 @@ def visible_and_on_top(win):
     for c in clients:
         if c["address"] == win["address"] or not c.get("mapped", True) or c.get("hidden"):
             continue
+        if c.get("pid") == win.get("pid"):
+            # Our own dialogues, such as About, are meant to be there.
+            continue
         if not (c.get("floating") or c.get("pinned")):
             continue
         if not (c.get("pinned") or c["workspace"]["id"] == win["workspace"]["id"]):
@@ -224,11 +227,9 @@ def visible_and_on_top(win):
 
 
 def looks_like_dialogue(img):
-    """The left part of a prefer-dark libadwaita header bar is plain and dark."""
-    strip = img.convert("L").crop((8, 8, img.width // 4, 30))
-    lo, hi = strip.getextrema()
-    mean = ImageStat.Stat(strip).mean[0]
-    return hi - lo < 25 and mean < 80
+    """Most of a prefer-dark libadwaita header bar is one flat dark colour."""
+    pixels = list(img.convert("L").crop((0, 0, img.width, 44)).getdata())
+    return sum(1 for value in pixels if value < 90) >= 0.85 * len(pixels)
 
 
 def capture(binary, tmp, page):
@@ -268,9 +269,13 @@ def capture(binary, tmp, page):
     finally:
         proc.terminate()
         proc.wait(timeout=5)
-        # Let the single-instance D-Bus name go, or the next run would merely
-        # activate this dying instance and exit.
-        time.sleep(1.5)
+        # Wait for the window to go, then let the single-instance D-Bus name go,
+        # or the next run would merely activate this dying instance and exit.
+        for _ in range(25):
+            if hypr_window() is None:
+                break
+            time.sleep(0.2)
+        time.sleep(0.5)
 
 
 def rounded(img, radius=WINDOW_RADIUS):

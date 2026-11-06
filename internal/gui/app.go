@@ -61,6 +61,8 @@ flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); 
 .er-cammsg { font-size: 0.7em; color: #cbd5e1; }
 .er-mirror { transform: scale(-1, 1); }
 .er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
+.er-selection button { padding-left: 6px; padding-right: 6px; }
+.er-selection spinbutton > button { min-width: 18px; padding-left: 0; padding-right: 0; }
 .er-section { font-weight: 700; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.04em; }
 .er-sponsor { color: #ff69b4; }
 `
