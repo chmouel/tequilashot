@@ -632,7 +632,7 @@ func (a *app) snapTrimSelection() {
 			return
 		}
 		end, err := snapFrameTime(ctx, file, clock, selection.end, duration)
-		if err != nil || start >= end {
+		if err != nil {
 			return
 		}
 		glib.IdleAdd(func() {
@@ -643,6 +643,8 @@ func (a *app) snapTrimSelection() {
 			if start == t.selection.start && end == t.selection.end {
 				return
 			}
+			// A selection that snaps onto one frame is shown as it stands, so the
+			// error bar says why nothing could be cut rather than hiding it.
 			t.selection.start, t.selection.end = start, end
 			a.updateTrim()
 			a.commitTrimEdit()

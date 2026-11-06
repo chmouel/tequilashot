@@ -76,15 +76,14 @@ func (w frameWindow) snap(at time.Duration) (time.Duration, bool) {
 }
 
 // snapFrameTime returns the timestamp of the first frame at or after at, and
-// duration when no frame starts before the recording ends.
+// duration when no frame starts before the recording ends. A boundary at the
+// very start still asks for the first frame, so a recording whose picture
+// starts after its sound keeps the two together.
 func snapFrameTime(ctx context.Context, file string, clock *frameClock, at, duration time.Duration) (time.Duration, error) {
-	if at <= 0 {
-		return 0, nil
-	}
 	if at >= duration {
 		return duration, nil
 	}
-	window, err := loadFrameWindow(ctx, file, clock, at, duration)
+	window, err := loadFrameWindowLimit(ctx, file, clock, max(0, at), duration, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -95,6 +94,12 @@ func snapFrameTime(ctx context.Context, file string, clock *frameClock, at, dura
 }
 
 func loadFrameWindow(ctx context.Context, file string, clock *frameClock, at, duration time.Duration) (frameWindow, error) {
+	return loadFrameWindowLimit(ctx, file, clock, at, duration, 256)
+}
+
+// loadFrameWindowLimit reads frames around at, stopping once limit frames at
+// or after it have been read; the trim preview wants many, snapping wants one.
+func loadFrameWindowLimit(ctx context.Context, file string, clock *frameClock, at, duration time.Duration, limit int) (frameWindow, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	start, end := max(0, at-time.Second), duration
@@ -133,7 +138,7 @@ func loadFrameWindow(ctx context.Context, file string, clock *frameClock, at, du
 		if stamp >= at {
 			following++
 		}
-		if following == 256 {
+		if following == limit {
 			stopped = true
 			window.last = false
 			cancel()

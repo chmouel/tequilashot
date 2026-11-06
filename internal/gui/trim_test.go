@@ -318,3 +318,49 @@ func TestExportTrimSparseFrameDuration(t *testing.T) {
 		t.Fatalf("the last frame is displayed for %s; expected %s", last, span)
 	}
 }
+
+func TestExportTrimDelayedPicture(t *testing.T) {
+	for _, tool := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip(tool + " is not installed")
+		}
+	}
+	source := filepath.Join(t.TempDir(), "delayed.mp4")
+	trimTestCommand(t, "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+		"-itsoffset", "0.3", "-f", "lavfi", "-i", "color=red:s=160x96:r=20:d=4",
+		"-map", "1:v", "-map", "0:a", "-c:v", "libx264", "-g", "80", "-c:a", "aac", source)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	path, _, err := exportTrim(ctx, source, trimSelection{0, 2 * time.Second, 4 * time.Second, false}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	durations := trimStreamDurations(t, path)
+	video, audio := durations["video"], durations["audio"]
+	const want = 1700 * time.Millisecond
+	if math.Abs((video - want).Seconds()) > 0.03 {
+		t.Fatalf("video lasts %s; expected the pictures from 0.300s for %s", video, want)
+	}
+	if math.Abs((audio - video).Seconds()) > 0.02 {
+		t.Fatalf("video lasts %s but audio lasts %s; the delayed picture was not held to the sound", video, audio)
+	}
+}
+
+func TestExportTrimCollapsedToFrame(t *testing.T) {
+	for _, tool := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip(tool + " is not installed")
+		}
+	}
+	source := filepath.Join(t.TempDir(), "narrow.mp4")
+	trimTestCommand(t, "-f", "lavfi", "-i", "color=red:s=160x96:r=20:d=4",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:v", "libx264", "-g", "80", "-c:a", "aac", source)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	for _, remove := range []bool{false, true} {
+		selection := trimSelection{375 * time.Millisecond, 390 * time.Millisecond, 4 * time.Second, remove}
+		if _, _, err := exportTrim(ctx, source, selection, nil); err == nil {
+			t.Fatalf("remove=%v: a selection shorter than a frame was exported", remove)
+		}
+	}
+}

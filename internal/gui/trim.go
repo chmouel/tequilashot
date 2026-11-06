@@ -58,31 +58,30 @@ func trimSeconds(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', 9, 64)
 }
 
-// snapTrimSegments moves each boundary onto the first source frame at or after
-// it, so audio and video share one origin and the exported span is made only of
-// whole frames.
-func snapTrimSegments(ctx context.Context, source string, segments []trimSegment, duration time.Duration) ([]trimSegment, error) {
+// snapTrimSelection moves the in and out points onto source frames before the
+// kept spans are worked out, so both streams share one origin and a cut removes
+// only whole frames.
+func snapTrimSelection(ctx context.Context, source string, selection trimSelection) (trimSelection, error) {
 	clock, err := probeFrameClock(ctx, source)
 	if err != nil {
-		return nil, err
+		return selection, err
 	}
-	snapped := make([]trimSegment, len(segments))
-	for i, segment := range segments {
-		start, err := snapFrameTime(ctx, source, clock, segment.start, duration)
-		if err != nil {
-			return nil, err
-		}
-		end, err := snapFrameTime(ctx, source, clock, segment.end, duration)
-		if err != nil {
-			return nil, err
-		}
-		if start < end {
-			snapped[i] = trimSegment{start, end}
-		} else {
-			snapped[i] = segment
-		}
+	start, err := snapFrameTime(ctx, source, clock, selection.start, selection.duration)
+	if err != nil {
+		return selection, err
 	}
-	return snapped, nil
+	end, err := snapFrameTime(ctx, source, clock, selection.end, selection.duration)
+	if err != nil {
+		return selection, err
+	}
+	if start >= end {
+		if selection.remove {
+			return selection, errors.New("the selection is shorter than a frame, so nothing would be removed")
+		}
+		return selection, errors.New("the selection is shorter than a frame, so nothing would be kept")
+	}
+	selection.start, selection.end = start, end
+	return selection, nil
 }
 
 func trimFilters(segments []trimSegment, audio bool) string {
@@ -131,8 +130,11 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 	if err != nil {
 		return "", MediaInfo{}, err
 	}
-	segments, err = snapTrimSegments(ctx, source, segments, selection.duration)
+	selection, err = snapTrimSelection(ctx, source, selection)
 	if err != nil {
+		return "", MediaInfo{}, err
+	}
+	if segments, err = selection.segments(); err != nil {
 		return "", MediaInfo{}, err
 	}
 	audio, err := trimHasAudio(ctx, source)
