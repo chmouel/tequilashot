@@ -252,23 +252,6 @@ func Satty(ctx context.Context, inputFile, outputFile string, earlyExit bool) er
 	return cmd.Run()
 }
 
-// Zenity shows a text entry dialog
-func Zenity(ctx context.Context, text, entryText string) (string, error) {
-	args := []string{
-		"--entry",
-		"--text", text,
-		"--entry-text", entryText,
-	}
-
-	cmd := exec.CommandContext(ctx, prefs.Bin("zenity"), args...) //nolint:gosec
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(string(output)), nil
-}
-
 // AIChat uses aichat to generate a filename
 func AIChat(ctx context.Context, model, imagePath, prompt string) (string, error) {
 	args := []string{

@@ -72,6 +72,10 @@ func (d *Daemon) Start() error {
 	// Start cleanup routine
 	go d.cleanupRoutine()
 
+	// Learn in the background whether the naming window can be shown, so no
+	// request waits on it.
+	go external.EntrySupported()
+
 	// Handle signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)

@@ -4,6 +4,7 @@ package gui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -310,38 +311,47 @@ func (a *app) choose(dlg *adw.AlertDialog, done func(response string)) {
 
 // renameDialog asks for a new name; problem, when set, explains a previous refusal.
 func (a *app) renameDialog(problem string) {
-	body := "The " + filepath.Ext(a.res.file) + " extension is kept."
+	file := a.res.file
+	ext := filepath.Ext(file)
+	body := "The " + ext + " extension is kept."
 	if problem != "" {
 		body = "Regrettably, " + problem + "."
 	}
-	dlg := adw.NewAlertDialog("Rename "+a.resultNoun(), body)
+	dlg := adw.NewAlertDialog(ActionRename.Title(a.resultNoun()), body)
 	dlg.AddResponse("cancel", "Cancel")
 	dlg.AddResponse("rename", "Rename")
 	dlg.SetResponseAppearance("rename", adw.ResponseSuggested)
 	dlg.SetDefaultResponse("rename")
 	dlg.SetCloseResponse("cancel")
 
-	entry := gtk.NewEntry()
-	entry.SetText(strings.TrimSuffix(filepath.Base(a.res.file), filepath.Ext(a.res.file)))
-	entry.SetActivatesDefault(true)
-	dlg.SetExtraChild(entry)
+	form := newNameForm(nameFormOpts{
+		Mode: ModeRename, Action: ActionRename,
+		Dir: filepath.Dir(file), Ext: ext, Current: file,
+		Stem: strings.TrimSuffix(filepath.Base(file), ext),
+	}, func(_ NameCheck, p Presentation) { dlg.SetResponseEnabled("rename", p.Enabled) })
+	dlg.SetExtraChild(form.box)
+	form.refresh()
 
 	a.choose(dlg, func(response string) {
 		if response != "rename" {
 			return
 		}
-		target, err := RenameTarget(a.res.file, entry.Text())
-		if err == nil && target != a.res.file {
-			err = os.Rename(a.res.file, target)
+		target := form.check().Target
+		if target == "" || target == file {
+			return
 		}
-		if err != nil {
-			a.renameDialog(err.Error())
+		if err := CommitFile(file, target, false); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				a.renameDialog("that name was taken whilst you were choosing")
+			} else {
+				a.renameDialog(err.Error())
+			}
 			return
 		}
 		a.res.file = target
 		a.updateResultLabels()
 	})
-	entry.GrabFocus()
+	form.entry.GrabFocus()
 }
 
 func (a *app) confirmDelete() {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/gui"
 	"github.com/chmouel/tequilashot/internal/notify"
 	"github.com/chmouel/tequilashot/internal/state"
 	"github.com/chmouel/tequilashot/internal/sway"
@@ -174,8 +175,11 @@ func (h *ScreenshotHandler) SelectionFile(ctx context.Context, delay int) error 
 	actions := []notify.Action{
 		{ID: "copyclip", Label: "Copy image"},
 		{ID: "copypath", Label: "Copy path"},
-		{ID: "edit", Label: "Edit"},
-		{ID: "rename", Label: "Rename"},
+	}
+	if external.EntrySupported() {
+		actions = append(actions,
+			notify.Action{ID: "edit", Label: "Edit"},
+			notify.Action{ID: "rename", Label: "Rename"})
 	}
 
 	action, err := notify.SendWithActions(30000, h.cfg.ScreenshotIcon, "Screenshot saved", filepath.Base(file), actions)
@@ -197,24 +201,27 @@ func (h *ScreenshotHandler) SelectionFile(ctx context.Context, delay int) error 
 	case "copypath":
 		return external.WlCopyText(ctx, file)
 
-	case "rename", "edit":
-		newname, err := external.Zenity(ctx, "Rename file", filepath.Base(file))
-		if err != nil || newname == "" {
-			return nil
-		}
-
+	case "rename":
 		ext := filepath.Ext(file)
-		if !strings.HasSuffix(newname, ext) {
-			newname += ext
-		}
+		return askName(ctx, h.cfg.ScreenshotIcon, external.EntryRequest{
+			Action: "rename", Dir: filepath.Dir(file), Ext: ext,
+			Name: strings.TrimSuffix(filepath.Base(file), ext), File: file,
+		}, func(target string, overwrite bool) error {
+			if target == file {
+				return nil
+			}
+			return gui.CommitFile(file, target, overwrite)
+		})
 
-		if action == "edit" {
-			outputFile := filepath.Join(filepath.Dir(file), newname)
-			return external.Satty(ctx, file, outputFile, true)
-		}
-
-		newPath := filepath.Join(filepath.Dir(file), newname)
-		return os.Rename(file, newPath)
+	case "edit":
+		// The original is kept unless its own name is chosen on purpose.
+		ext := filepath.Ext(file)
+		return askName(ctx, h.cfg.ScreenshotIcon, external.EntryRequest{
+			Action: "edit", Dir: filepath.Dir(file), Ext: ext,
+			Name: strings.TrimSuffix(filepath.Base(file), ext) + "-edited", File: file,
+		}, func(target string, overwrite bool) error {
+			return editInto(ctx, file, target, overwrite)
+		})
 	}
 
 	return nil
@@ -271,6 +278,10 @@ func (h *ScreenshotHandler) SelectionClipboard(ctx context.Context, delay int) e
 		return err
 	}
 
+	if !external.EntrySupported() {
+		return notify.Send(5000, h.cfg.ScreenshotIcon, "Screenshot copied", "The image is ready to paste from the clipboard.")
+	}
+
 	actions := []notify.Action{
 		{ID: "save", Label: "Save"},
 		{ID: "saveai", Label: "Save with AI"},
@@ -284,72 +295,36 @@ func (h *ScreenshotHandler) SelectionClipboard(ctx context.Context, delay int) e
 
 	action = strings.TrimSpace(action)
 
-	if action == "" || (action != "save" && action != "saveai" && action != "edit") {
+	if action != "save" && action != "saveai" && action != "edit" {
 		return nil
 	}
 
 	dir := h.cfg.SaveDir()
-	defaultName := filepath.Base(config.GenerateFilename(dir))
-
-	if action == "saveai" {
-		tmpFile := fmt.Sprintf("/tmp/screenshot-%d.png", time.Now().Unix())
-		clipData, err := external.WlPaste(ctx, "image/png")
-		if err != nil {
-			return err
-		}
-
-		if err := os.WriteFile(tmpFile, clipData, 0o600); err != nil {
-			return err
-		}
-		defer func() { _ = os.Remove(tmpFile) }()
-
-		aiName, err := external.AIChat(ctx, h.cfg.AIModel(), tmpFile,
-			"identify a filename for that image and return only the slug of the filename, nothing else")
-
-		if err == nil && aiName != "" {
-			defaultName = aiName
-			if !strings.HasSuffix(defaultName, ".png") {
-				defaultName += ".png"
-			}
-		}
-	}
-
-	newname, err := external.Zenity(ctx, "File Name", defaultName)
-	if err != nil || newname == "" {
-		return nil
-	}
-
-	if !strings.HasSuffix(newname, ".png") {
-		newname += ".png"
-	}
-
-	outputFile := filepath.Join(dir, newname)
-
-	if action == "edit" {
-		clipData, err := external.WlPaste(ctx, "image/png")
-		if err != nil {
-			return err
-		}
-
-		tmpFile := fmt.Sprintf("/tmp/screenshot-%d.png", time.Now().Unix())
-		if err := os.WriteFile(tmpFile, clipData, 0o600); err != nil {
-			return err
-		}
-		defer func() { _ = os.Remove(tmpFile) }()
-
-		return external.Satty(ctx, tmpFile, outputFile, true)
-	}
-
-	// Save action
-	clipData, err := external.WlPaste(ctx, "image/png")
+	snapshot, err := writeSnapshot(dir, data)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = os.Remove(snapshot) }()
 
-	if err := os.WriteFile(outputFile, clipData, 0o600); err != nil {
-		return err
+	req := external.EntryRequest{
+		Action: "save", Dir: dir, Ext: ".png", File: snapshot,
+		Name: strings.TrimSuffix(filepath.Base(config.GenerateFilename(dir)), ".png"),
+	}
+	if action == "edit" {
+		req.Action = "edit"
+	}
+	if action == "saveai" {
+		req.AIModel = h.cfg.AIModel()
 	}
 
-	// Open in file manager
-	return external.Nautilus(ctx, "file://"+outputFile)
+	return askName(ctx, h.cfg.ScreenshotIcon, req, func(target string, overwrite bool) error {
+		if action == "edit" {
+			return editInto(ctx, snapshot, target, overwrite)
+		}
+		if err := gui.WriteNewFile(target, data, overwrite); err != nil {
+			return err
+		}
+		// Open in file manager
+		return external.Nautilus(ctx, "file://"+target)
+	})
 }

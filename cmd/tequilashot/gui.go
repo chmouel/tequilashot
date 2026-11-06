@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/chmouel/tequilashot/internal/config"
@@ -53,4 +55,38 @@ func cameraBubbleAction(_ context.Context, c *cli.Command) error {
 		RemoveBackground: c.Bool("remove-background"),
 		NoRing:           c.Bool("no-ring"),
 	})
+}
+
+// entryAction answers the daemon's request for a file name. The result is
+// carried by the exit status: 0 for a name, 3 for a name that replaces an
+// existing file, 1 when declined and 2 on failure.
+func entryAction(_ context.Context, c *cli.Command) error {
+	_ = prefs.Reload()
+	if c.Bool("probe") {
+		if !gui.ProbeEntry() {
+			os.Exit(entryExitError)
+		}
+		return nil
+	}
+	res, err := gui.RunEntry(gui.EntryOptions{
+		Action:  gui.NameAction(c.String("action")),
+		Dir:     c.String("dir"),
+		Ext:     c.String("ext"),
+		Name:    c.String("name"),
+		File:    c.String("file"),
+		Problem: c.String("problem"),
+		AIModel: c.String("ai-model"),
+	})
+	switch {
+	case errors.Is(err, gui.ErrEntryCancelled):
+		os.Exit(entryExitCancel)
+	case err != nil:
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(entryExitError)
+	}
+	fmt.Println(res.Name)
+	if res.Overwrite {
+		os.Exit(entryExitOverwrite)
+	}
+	return nil
 }

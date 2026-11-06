@@ -52,6 +52,7 @@ func main() {
 			toggleRecordCommand(),
 			virtualCameraCommand(),
 			cameraBubbleCommand(),
+			entryCommand(),
 		},
 	}
 
@@ -356,6 +357,33 @@ func cameraBubbleCommand() *cli.Command {
 			&cli.BoolFlag{Name: "no-ring"},
 		},
 		Action: cameraBubbleAction,
+	}
+}
+
+// Exit statuses of the entry command, shared with internal/external.
+const (
+	entryExitCancel    = 1
+	entryExitError     = 2
+	entryExitOverwrite = 3
+)
+
+// entryCommand is started by the daemon to ask for a file name.
+func entryCommand() *cli.Command {
+	return &cli.Command{
+		Name:   "entry",
+		Usage:  "Ask for a file name (used internally by the daemon)",
+		Hidden: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "action", Value: "rename"},
+			&cli.StringFlag{Name: "dir"},
+			&cli.StringFlag{Name: "ext"},
+			&cli.StringFlag{Name: "name"},
+			&cli.StringFlag{Name: "file"},
+			&cli.StringFlag{Name: "problem"},
+			&cli.StringFlag{Name: "ai-model"},
+			&cli.BoolFlag{Name: "probe"},
+		},
+		Action: entryAction,
 	}
 }
 

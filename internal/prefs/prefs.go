@@ -56,7 +56,7 @@ var (
 // always taken from PATH.
 var Programs = []string{
 	"gpu-screen-recorder", "grim", "slurp", "wf-recorder", "gst-launch-1.0",
-	"ffmpeg", "ffprobe", "wl-copy", "wl-paste", "satty", "aichat", "zenity",
+	"ffmpeg", "ffprobe", "wl-copy", "wl-paste", "satty", "aichat",
 	"wofi", "nautilus",
 }
 

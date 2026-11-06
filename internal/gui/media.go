@@ -11,7 +11,6 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -190,24 +189,6 @@ func ExtractFrame(ctx context.Context, file string, d time.Duration) ([]byte, er
 		}
 	}
 	return nil, errors.New("unreachable")
-}
-
-// RenameTarget validates a new base name and returns the resulting path,
-// always carrying the original extension and never an existing file.
-func RenameTarget(oldPath, name string) (string, error) {
-	ext := filepath.Ext(oldPath)
-	name = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(name), ext))
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
-		return "", errors.New("that is not a suitable file name")
-	}
-	target := filepath.Join(filepath.Dir(oldPath), name+ext)
-	if target == oldPath {
-		return oldPath, nil
-	}
-	if _, err := os.Lstat(target); err == nil {
-		return "", fmt.Errorf("%s already exists", name+ext)
-	}
-	return target, nil
 }
 
 func probeTrimSource(ctx context.Context, file string) (MediaInfo, error) {

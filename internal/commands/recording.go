@@ -18,6 +18,7 @@ import (
 
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/gui"
 	"github.com/chmouel/tequilashot/internal/notify"
 	"github.com/chmouel/tequilashot/internal/state"
 	"github.com/chmouel/tequilashot/internal/sway"
@@ -534,9 +535,11 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 	actions := []notify.Action{
 		{ID: "show", Label: "Show"},
 		{ID: "copypath", Label: "Copy path"},
-		{ID: "rename", Label: "Rename"},
-		{ID: "delete", Label: "Delete"},
 	}
+	if external.EntrySupported() {
+		actions = append(actions, notify.Action{ID: "rename", Label: "Rename"})
+	}
+	actions = append(actions, notify.Action{ID: "delete", Label: "Delete"})
 
 	action, err := notify.SendWithActions(30000, h.cfg.RecordingStopIcon, "Recording saved", filepath.Base(mp4File), actions)
 	if err != nil {
@@ -554,14 +557,15 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 		return external.Nautilus(ctx, "file://"+mp4File)
 
 	case "rename":
-		newname, err := external.Zenity(ctx, "Rename file", filepath.Base(mp4File))
-		if err != nil || newname == "" {
-			return nil
-		}
-		if !strings.HasSuffix(newname, ".mp4") {
-			newname += ".mp4"
-		}
-		return os.Rename(mp4File, filepath.Join(filepath.Dir(mp4File), newname))
+		return askName(ctx, h.cfg.RecordingStopIcon, external.EntryRequest{
+			Action: "rename", Dir: filepath.Dir(mp4File), Ext: ".mp4",
+			Name: strings.TrimSuffix(filepath.Base(mp4File), ".mp4"), File: mp4File,
+		}, func(target string, overwrite bool) error {
+			if target == mp4File {
+				return nil
+			}
+			return gui.CommitFile(mp4File, target, overwrite)
+		})
 
 	case "delete":
 		return os.Remove(mp4File)
