@@ -114,7 +114,7 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 
 	a.shapeRow = adw.NewActionRow()
 	a.shapeRow.SetTitle("Shape")
-	a.shapeRow.SetSubtitle("A circle is shown on screen and recorded with it")
+	a.shapeRow.SetSubtitle("Circle floats over the screen and is captured with it")
 	a.shapeRow.AddSuffix(shapes)
 
 	a.mirror = adw.NewSwitchRow()
@@ -124,7 +124,7 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 
 	a.cutout = adw.NewSwitchRow()
 	a.cutout.SetTitle("Remove background")
-	a.cutout.SetSubtitle("Shows only you; the picture behind shows through. Needs ONNX Runtime and the model")
+	a.cutout.SetSubtitle("Shows only you; the screen behind shows through")
 	a.cutout.SetActive(a.settings.CameraRemoveBackground)
 	a.cutout.NotifyProperty("active", func() {
 		a.syncShape()
@@ -132,28 +132,42 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	})
 
 	a.modelRow = adw.NewActionRow()
-	a.modelRow.SetTitle("Background removal model")
+	a.modelRow.SetTitle("Segmentation model")
+	a.modelProgress = gtk.NewProgressBar()
+	a.modelProgress.AddCSSClass("er-model-progress")
+	a.modelProgress.SetVAlign(gtk.AlignCenter)
+	a.modelProgress.SetVisible(false)
 	a.modelBtn = gtk.NewButtonWithLabel("Download")
 	a.modelBtn.SetVAlign(gtk.AlignCenter)
 	a.modelBtn.AddCSSClass("suggested-action")
 	a.modelBtn.ConnectClicked(a.downloadModel)
+	a.modelRow.AddSuffix(a.modelProgress)
 	a.modelRow.AddSuffix(a.modelBtn)
 
 	a.noRing = adw.NewSwitchRow()
 	a.noRing.SetTitle("Hide ring")
-	a.noRing.SetSubtitle("Leaves out the white ring around you")
+	a.noRing.SetSubtitle("Leaves out the white border around the circle")
 	a.noRing.SetActive(a.settings.CameraNoRing)
+	a.noRing.NotifyProperty("active", a.syncShape)
+
+	a.advancedRow = adw.NewExpanderRow()
+	a.advancedRow.SetTitle("Advanced")
+	a.advancedRow.SetSubtitleLines(1)
+	a.advancedRow.AddRow(a.shapeRow)
+	a.advancedRow.AddRow(a.cutout)
+	a.advancedRow.AddRow(a.modelRow)
+	a.advancedRow.AddRow(a.noRing)
+	if a.settings.CameraShape == external.CameraCircle || a.settings.CameraRemoveBackground || a.settings.CameraNoRing {
+		a.advancedRow.SetExpanded(true)
+	}
 
 	list := gtk.NewListBox()
 	list.SetSelectionMode(gtk.SelectionNone)
 	list.AddCSSClass("boxed-list")
 	list.Append(a.camRow)
 	list.Append(sizeRow)
-	list.Append(a.shapeRow)
 	list.Append(a.mirror)
-	list.Append(a.cutout)
-	list.Append(a.modelRow)
-	list.Append(a.noRing)
+	list.Append(a.advancedRow)
 
 	a.cameraBox = gtk.NewBox(gtk.OrientationVertical, 14)
 	a.cameraBox.SetMarginTop(8)
@@ -342,12 +356,54 @@ func (a *app) syncShape() {
 	a.cutout.SetVisible(a.round())
 	a.noRing.SetVisible(a.cutoutWanted())
 	a.syncModelRow()
-	if a.round() && a.cutout.Active() {
+	if a.cutoutWanted() {
 		a.camTile.AddCSSClass("er-cutout")
 	} else {
 		a.camTile.RemoveCSSClass("er-cutout")
 	}
+	if a.cutoutWanted() && a.noRing != nil && a.noRing.Active() {
+		a.camTile.AddCSSClass("er-noring")
+	} else {
+		a.camTile.RemoveCSSClass("er-noring")
+	}
+	a.syncAdvancedSummary()
 	a.prevOverlay.QueueResize()
+}
+
+// syncAdvancedSummary updates the subtitle on the Advanced expander row so
+// active circle and background-removal settings remain visible when collapsed.
+func (a *app) syncAdvancedSummary() {
+	if a.advancedRow == nil {
+		return
+	}
+	var parts []string
+	if a.settings.Mode != ModeCamera {
+		if a.round() {
+			parts = append(parts, "Circle")
+		} else {
+			parts = append(parts, "Square")
+		}
+	}
+	if a.cutoutWanted() {
+		switch {
+		case a.modelBusy:
+			parts = append(parts, "Downloading model")
+		case segment.RuntimeAvailable() != nil:
+			parts = append(parts, "ONNX Runtime needed")
+			a.advancedRow.SetExpanded(true)
+		case !segment.ModelInstalled():
+			parts = append(parts, "Model download needed")
+			a.advancedRow.SetExpanded(true)
+		default:
+			parts = append(parts, "Background removed")
+		}
+		if a.noRing != nil && a.noRing.Active() {
+			parts = append(parts, "No ring")
+		}
+	} else if a.settings.Mode == ModeCamera {
+		parts = append(parts, "Standard circle")
+	}
+	a.advancedRow.SetSubtitle(strings.Join(parts, ", "))
 }
 
 // syncModelRow shows what removal still needs: the system's ONNX Runtime, or
@@ -357,14 +413,15 @@ func (a *app) syncModelRow() {
 		a.modelRow.SetVisible(a.modelBusy && a.cutoutWanted())
 		return
 	}
+	a.modelProgress.SetVisible(false)
 	switch {
 	case segment.RuntimeAvailable() != nil:
 		a.modelRow.SetVisible(true)
-		a.modelRow.SetSubtitle("ONNX Runtime was not found. Install your distribution's onnxruntime package")
+		a.modelRow.SetSubtitle("Install your distribution's onnxruntime package to enable")
 		a.modelBtn.SetVisible(false)
 	case !segment.ModelInstalled():
 		a.modelRow.SetVisible(true)
-		a.modelRow.SetSubtitle("Needed once, about 176 MB, saved to " + segment.ModelPath())
+		a.modelRow.SetSubtitle("One-off 176 MB download to " + segment.ModelPath())
 		a.modelBtn.SetLabel("Download")
 		a.modelBtn.SetVisible(true)
 		a.modelBtn.SetSensitive(true)
@@ -376,24 +433,33 @@ func (a *app) syncModelRow() {
 // downloadModel fetches the model in the background, then restarts the preview.
 func (a *app) downloadModel() {
 	a.modelBusy = true
-	a.modelBtn.SetSensitive(false)
+	a.modelBtn.SetVisible(false)
+	a.modelProgress.SetFraction(0)
+	a.modelProgress.SetVisible(true)
 	a.modelRow.SetSubtitle("Downloading, 0%")
+	a.syncAdvancedSummary()
 	go func() {
 		last := -1
 		err := segment.DownloadModel(context.Background(), func(done, total int64) {
 			if pct := int(done * 100 / total); pct != last {
 				last = pct
-				glib.IdleAdd(func() { a.modelRow.SetSubtitle(fmt.Sprintf("Downloading, %d%%", pct)) })
+				frac := float64(done) / float64(total)
+				glib.IdleAdd(func() {
+					a.modelProgress.SetFraction(min(1, max(0, frac)))
+					a.modelRow.SetSubtitle(fmt.Sprintf("Downloading, %d%%", pct))
+				})
 			}
 		})
 		glib.IdleAdd(func() {
 			a.modelBusy = false
+			a.modelProgress.SetVisible(false)
 			if err != nil {
 				a.toast("The model could not be downloaded: " + err.Error())
 			} else {
 				a.toast("Background removal model installed")
 			}
 			a.syncModelRow()
+			a.syncAdvancedSummary()
 			a.syncPreview()
 		})
 	}()
@@ -575,7 +641,8 @@ func (a *app) syncPreview() {
 			func(err error) {
 				log.Printf("background removal: %v", err)
 				failed()
-			})
+			},
+		)
 		onFrame = a.previewCutter.Put
 	} else {
 		onFrame = func(frame []byte) {

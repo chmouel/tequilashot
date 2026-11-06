@@ -56,8 +56,10 @@ flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); 
 .er-layout:focus-visible { outline: 2px solid @accent_bg_color; outline-offset: 2px; }
 .er-prevholder { background: #1e293b; color: #94a3b8; }
 .er-camtile { border-radius: 6px; background: #334155; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px @accent_bg_color; }
-.er-camtile.er-round { border-radius: 9999px; }
-.er-camtile.er-cutout { background: transparent; box-shadow: none; }
+.er-camtile.er-round { border-radius: 9999px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px rgba(255, 255, 255, 0.92); }
+.er-camtile.er-cutout { background: transparent; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.92); }
+.er-camtile.er-noring { box-shadow: none; }
+.er-model-progress { min-width: 110px; }
 .er-cammsg { font-size: 0.7em; color: #cbd5e1; }
 .er-mirror { transform: scale(-1, 1); }
 .er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
@@ -117,11 +119,13 @@ type app struct {
 	camera         *gtk.ToggleButton
 	cameraRevealer *gtk.Revealer
 	cameraBox      *gtk.Box
+	advancedRow    *adw.ExpanderRow
 	mirror         *adw.SwitchRow
 	cutout         *adw.SwitchRow
 	noRing         *adw.SwitchRow
 	modelRow       *adw.ActionRow
 	modelBtn       *gtk.Button
+	modelProgress  *gtk.ProgressBar
 	modelBusy      bool
 	previewCut     bool
 	previewCutter  *cutter
