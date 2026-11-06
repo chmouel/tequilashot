@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"image"
@@ -28,6 +29,8 @@ type BubbleOptions struct {
 	Device   string
 	X, Y     int // top-left corner in global layout coordinates
 	Diameter int
+	Area     image.Rectangle
+	Size     string
 	Width    int // capture mode
 	Height   int
 	FPS      int
@@ -56,7 +59,7 @@ window.easyshot-bubble .easyshot-bubble-disc.noring { border-color: transparent;
 func RunCameraBubble(opts BubbleOptions) error {
 	// The recorder preloads gtk4-layer-shell for us; ffmpeg must not inherit it.
 	_ = os.Unsetenv("LD_PRELOAD")
-	if !external.ValidCameraDevice(opts.Device) || opts.Diameter <= 0 {
+	if !external.ValidCameraDevice(opts.Device) || opts.Diameter <= 0 || opts.Area.Empty() {
 		return fmt.Errorf("invalid camera bubble options")
 	}
 	if err := loadLayerShell(); err != nil {
@@ -95,11 +98,26 @@ func RunCameraBubble(opts BubbleOptions) error {
 			fail(errors.New("the compositor does not support the layer shell needed for the round camera"))
 			return
 		}
-		win, pic, err := buildBubble(app, opts)
+		win, pic, cycle, err := buildBubble(app, opts)
 		if err != nil {
 			fail(err)
 			return
 		}
+		go func() {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				if scanner.Text() == "cycle" {
+					glib.IdleAdd(func() {
+						position, err := cycle()
+						if err != nil {
+							fmt.Println(err)
+						} else {
+							fmt.Println(position)
+						}
+					})
+				}
+			}
+		}()
 
 		ready := false
 		show := func(tex gdk.Paintabler) {
@@ -178,10 +196,10 @@ func RunCameraBubble(opts BubbleOptions) error {
 }
 
 // buildBubble creates the hidden bubble window on the monitor holding its centre.
-func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Picture, error) {
+func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Picture, func() (string, error), error) {
 	display := gdk.DisplayGetDefault()
 	if display == nil {
-		return nil, nil, errors.New("no display available")
+		return nil, nil, nil, errors.New("no display available")
 	}
 	ring := max(2, opts.Diameter/90)
 	css := gtk.NewCSSProvider()
@@ -211,6 +229,7 @@ func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Pi
 	// The window covers the whole monitor and the disc moves within it, so a
 	// drag never waits on the compositor to move the surface.
 	monitor, left, top := monitorAt(display, opts.X, opts.Y, opts.Diameter)
+	origin := image.Pt(opts.X-left, opts.Y-top)
 	fixed := gtk.NewFixed()
 	fixed.Put(disc, float64(left), float64(top))
 
@@ -220,7 +239,7 @@ func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Pi
 	win.SetDecorated(false)
 	win.SetChild(fixed)
 	if err := placeLayer(win, monitor); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Only the disc takes the pointer; clicks elsewhere reach what lies beneath.
@@ -232,25 +251,44 @@ func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Pi
 		}
 	}
 	win.ConnectRealize(setInput)
+	move := func(x, y int) {
+		left, top = x, y
+		fixed.Move(disc, float64(left), float64(top))
+	}
+	dragging := false
+	cycle := func() (string, error) {
+		if dragging {
+			return "", errors.New("finish dragging the round camera first")
+		}
+		area := opts.Area.Sub(origin)
+		position, corner, err := nextBubbleCorner(area, image.Rect(0, 0, fixed.Width(), fixed.Height()), opts.Diameter, opts.Size, image.Pt(left, top))
+		if err != nil {
+			return "", err
+		}
+		move(position.X, position.Y)
+		setInput()
+		return corner, nil
+	}
 
 	disc.SetCursorFromName("grab")
 	drag := gtk.NewGestureDrag()
 	startX, startY := left, top
 	drag.ConnectDragBegin(func(_, _ float64) {
+		dragging = true
 		startX, startY = left, top
 		disc.SetCursorFromName("grabbing")
 	})
 	drag.ConnectDragUpdate(func(dx, dy float64) {
-		left = clampInt(startX+int(dx), 0, fixed.Width()-opts.Diameter)
-		top = clampInt(startY+int(dy), 0, fixed.Height()-opts.Diameter)
-		fixed.Move(disc, float64(left), float64(top))
+		move(clampInt(startX+int(dx), 0, fixed.Width()-opts.Diameter),
+			clampInt(startY+int(dy), 0, fixed.Height()-opts.Diameter))
 	})
 	drag.ConnectDragEnd(func(_, _ float64) {
+		dragging = false
 		disc.SetCursorFromName("grab")
 		setInput()
 	})
 	disc.AddController(drag)
-	return win, pic, nil
+	return win, pic, cycle, nil
 }
 
 // circleRegion approximates a disc of diameter d at x, y with one-pixel strips.

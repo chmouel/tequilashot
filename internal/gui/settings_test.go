@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -266,5 +267,69 @@ func TestMicLabels(t *testing.T) {
 			t.Errorf("labels = %v, want %v", got, want)
 			break
 		}
+	}
+}
+
+func TestRememberCameraPosition(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	path, err := settingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := DefaultSettings()
+	settings.Camera = true
+	settings.Mode = ModeCamera
+	if err := SaveSettings(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := RememberCameraPosition(external.CameraTopLeft); err != nil {
+		t.Fatal(err)
+	}
+	settings.CameraPosition = external.CameraTopLeft
+	if got := LoadSettings(path); got != settings {
+		t.Fatalf("settings after moving camera = %+v, want %+v", got, settings)
+	}
+	if got := RememberedCameraPosition(); got != external.CameraTopLeft {
+		t.Fatalf("remembered corner = %q", got)
+	}
+	bad := []byte("{invalid")
+	if err := os.WriteFile(path, bad, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RememberCameraPosition(external.CameraTopRight); err == nil {
+		t.Fatal("overwrote invalid settings")
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, bad) { //nolint:gosec // path is under t.TempDir
+		t.Fatalf("invalid settings changed: %q, %v", got, err)
+	}
+}
+
+func TestRememberCameraPositionPreservesSettingsSymlink(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", root)
+	path, err := settingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "linked-settings.json")
+	if err := os.WriteFile(target, []byte(`{"source":"region"}`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	if err := RememberCameraPosition(external.CameraTopRight); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("settings link was replaced: %v", err)
+	}
+	got := LoadSettings(target)
+	if got.CameraPosition != external.CameraTopRight || got.Source != SourceRegion {
+		t.Fatalf("linked settings = %+v", got)
 	}
 }

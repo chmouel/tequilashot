@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"image"
 	"io"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -28,17 +30,26 @@ type CameraBubble struct {
 	cmd      *exec.Cmd
 	done     chan struct{}
 	stopping atomic.Bool
+	input    io.WriteCloser
+	replies  chan string
+	mu       sync.Mutex
+	failed   bool
 }
 
 // bubbleArgs returns the camera-bubble arguments for a circle of the given
 // diameter whose top-left corner is at x, y in layout coordinates.
-func (c CameraOverlay) bubbleArgs(x, y, diameter int) []string {
+func (c CameraOverlay) bubbleArgs(x, y, diameter int, area image.Rectangle) []string {
 	args := []string{
 		"camera-bubble",
 		"--device", c.Device,
 		"--x", strconv.Itoa(x),
 		"--y", strconv.Itoa(y),
 		"--diameter", strconv.Itoa(diameter),
+		"--area-x", strconv.Itoa(area.Min.X),
+		"--area-y", strconv.Itoa(area.Min.Y),
+		"--area-width", strconv.Itoa(area.Dx()),
+		"--area-height", strconv.Itoa(area.Dy()),
+		"--size", c.Size,
 		"--width", strconv.Itoa(c.Width),
 		"--height", strconv.Itoa(c.Height),
 		"--fps", strconv.Itoa(c.FPS),
@@ -58,7 +69,7 @@ func (c CameraOverlay) bubbleArgs(x, y, diameter int) []string {
 // StartCameraBubble shows the camera as a circle at x, y and waits until its
 // first picture is on screen. gtk4-layer-shell has to be loaded before the
 // Wayland client library, so it is preloaded into the bubble process.
-func StartCameraBubble(camera CameraOverlay, x, y, diameter int) (*CameraBubble, error) {
+func StartCameraBubble(camera CameraOverlay, x, y, diameter int, area image.Rectangle) (*CameraBubble, error) {
 	if err := camera.Validate(); err != nil {
 		return nil, err
 	}
@@ -67,7 +78,7 @@ func StartCameraBubble(camera CameraOverlay, x, y, diameter int) (*CameraBubble,
 		return nil, fmt.Errorf("failed to find tequilashot: %w", err)
 	}
 
-	cmd := exec.Command(exe, camera.bubbleArgs(x, y, diameter)...) //nolint:gosec // arguments are validated above
+	cmd := exec.Command(exe, camera.bubbleArgs(x, y, diameter, area)...) //nolint:gosec // arguments are validated above
 	preload := layerShellLibrary
 	if cur := os.Getenv("LD_PRELOAD"); cur != "" {
 		preload += ":" + cur
@@ -80,11 +91,15 @@ func StartCameraBubble(camera CameraOverlay, x, y, diameter int) (*CameraBubble,
 	if err != nil {
 		return nil, err
 	}
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start the round camera: %w", err)
 	}
 
-	b := &CameraBubble{cmd: cmd, done: make(chan struct{})}
+	b := &CameraBubble{cmd: cmd, done: make(chan struct{}), input: in, replies: make(chan string, 1)}
 	ready := make(chan bool, 1)
 	go func() {
 		ok := false
@@ -92,11 +107,14 @@ func StartCameraBubble(camera CameraOverlay, x, y, diameter int) (*CameraBubble,
 		for scanner.Scan() {
 			if scanner.Text() == "ready" {
 				ok = true
-				break
+				ready <- true
+			} else if ok {
+				b.replies <- scanner.Text()
 			}
 		}
-		ready <- ok
-		_, _ = io.Copy(io.Discard, out)
+		if !ok {
+			ready <- false
+		}
 		_ = cmd.Wait()
 		close(b.done)
 		// The camera hides itself when it fails, so the user is told why.
@@ -117,6 +135,37 @@ func StartCameraBubble(camera CameraOverlay, x, y, diameter int) (*CameraBubble,
 	case <-timer.C:
 		b.Stop()
 		return nil, fmt.Errorf("the round camera did not appear within %s", bubbleStartLimit)
+	}
+}
+
+// Cycle waits for the bubble to move and returns the chosen corner.
+func (b *CameraBubble) Cycle() (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.failed || b.stopping.Load() {
+		return "", fmt.Errorf("the round camera is no longer available")
+	}
+	select {
+	case <-b.done:
+		return "", fmt.Errorf("the round camera is no longer available")
+	default:
+	}
+	if _, err := fmt.Fprintln(b.input, "cycle"); err != nil {
+		return "", fmt.Errorf("failed to move the round camera: %w", err)
+	}
+	timer := time.NewTimer(3 * time.Second)
+	defer timer.Stop()
+	select {
+	case reply := <-b.replies:
+		if ValidCameraPosition(reply) {
+			return reply, nil
+		}
+		return "", fmt.Errorf("failed to move the round camera: %s", reply)
+	case <-b.done:
+		return "", fmt.Errorf("the round camera stopped")
+	case <-timer.C:
+		b.failed = true
+		return "", fmt.Errorf("the round camera did not respond")
 	}
 }
 

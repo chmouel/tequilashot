@@ -1264,6 +1264,13 @@ func (a *app) finish(saved *savedCapture, err error) {
 	a.mu.Unlock()
 	glib.IdleAdd(func() {
 		a.busy = false
+		if a.settingsPath != "" {
+			a.camPos = LoadSettings(a.settingsPath).CameraPosition
+			a.settings.CameraPosition = a.camPos
+			if a.prevOverlay != nil {
+				a.prevOverlay.QueueResize()
+			}
+		}
 		a.win.SetVisible(true)
 		a.win.Present()
 		if err != nil {

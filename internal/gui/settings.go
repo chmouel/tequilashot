@@ -9,6 +9,7 @@ import (
 
 	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/pkg/protocol"
+	"golang.org/x/sys/unix"
 )
 
 // Capture modes and source kinds selectable in the dialogue
@@ -143,14 +144,94 @@ func micLabels(devices []external.AudioDevice) []string {
 
 // SaveSettings writes settings to path, creating parent directories.
 func SaveSettings(path string, s Settings) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return withSettingsLock(path, func() error { return writeSettings(path, data) })
+}
+
+// RememberedCameraPosition defaults to the bottom-right when settings are unavailable.
+func RememberedCameraPosition() string {
+	path, err := settingsPath()
+	if err != nil {
+		return external.CameraBottomRight
+	}
+	return LoadSettings(path).CameraPosition
+}
+
+// RememberCameraPosition updates the corner without discarding other settings.
+func RememberCameraPosition(position string) error {
+	if !external.ValidCameraPosition(position) {
+		return fmt.Errorf("invalid camera position %q", position)
+	}
+	path, err := settingsPath()
+	if err != nil {
+		return err
+	}
+	return withSettingsLock(path, func() error {
+		settings := make(map[string]json.RawMessage)
+		data, err := os.ReadFile(path) //nolint:gosec // path is the user's settings file
+		if err == nil {
+			if err := json.Unmarshal(data, &settings); err != nil || settings == nil {
+				return fmt.Errorf("cannot update invalid capture settings")
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		settings["camera_position"], _ = json.Marshal(position)
+		data, err = json.MarshalIndent(settings, "", "  ")
+		if err != nil {
+			return err
+		}
+		return writeSettings(path, data)
+	})
+}
+
+func withSettingsLock(path string, write func() error) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // path is the user's settings file
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Close() }()
+	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+		return err
+	}
+	defer func() { _ = unix.Flock(int(lock.Fd()), unix.LOCK_UN) }()
+	return write()
+}
+
+func writeSettings(path string, data []byte) error {
+	info, err := os.Lstat(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	// Renaming over a symlink would replace it rather than update its target.
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return os.WriteFile(path, data, 0o600)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".settings-*.json")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if info != nil {
+		if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+			_ = tmp.Close()
+			return err
+		}
+	}
+	if _, err = tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // Selection is the concrete target chosen for a capture

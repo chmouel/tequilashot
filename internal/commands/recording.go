@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"math"
 	"os"
 	"os/exec"
@@ -39,6 +40,7 @@ type RecordingHandler struct {
 type recordSession struct {
 	base     string
 	pid      int
+	bubble   stopper
 	stopping atomic.Bool
 }
 
@@ -296,11 +298,17 @@ func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, op
 // earlyExitWindow is how long a new recorder must stay alive to count as started.
 const earlyExitWindow = 1500 * time.Millisecond
 
-type stopper interface{ Stop() }
+type stopper interface {
+	Stop()
+	Cycle() (string, error)
+}
+
+// ErrNoCameraBubble lets callers try another session when none is attached.
+var ErrNoCameraBubble = errors.New("the round camera is not running")
 
 var (
-	startBubble = func(camera external.CameraOverlay, x, y, diameter int) (stopper, error) {
-		return external.StartCameraBubble(camera, x, y, diameter)
+	startBubble = func(camera external.CameraOverlay, x, y, diameter int, area image.Rectangle) (stopper, error) {
+		return external.StartCameraBubble(camera, x, y, diameter, area)
 	}
 	outputGeometry = sway.GetOutputGeometry
 )
@@ -310,6 +318,9 @@ var (
 func showBubble(ctx context.Context, geometry, output string, camera external.CameraOverlay) (stopper, error) {
 	if !camera.Round() {
 		return nil, nil
+	}
+	if camera.Position == "" {
+		camera.Position = gui.RememberedCameraPosition()
 	}
 	if geometry == "" {
 		var err error
@@ -322,7 +333,7 @@ func showBubble(ctx context.Context, geometry, output string, camera external.Ca
 		return nil, fmt.Errorf("failed to place the round camera on %q", geometry)
 	}
 	bx, by, d := external.CircleLayout(float64(w), float64(h), camera.Size, camera.Position)
-	return startBubble(camera, x+int(math.Round(bx)), y+int(math.Round(by)), int(math.Round(d)))
+	return startBubble(camera, x+int(math.Round(bx)), y+int(math.Round(by)), int(math.Round(d)), image.Rect(x, y, x+w, y+h))
 }
 
 func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, opts RecordOptions) error {
@@ -355,7 +366,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
-	sess := &recordSession{base: base}
+	sess := &recordSession{base: base, bubble: bubble}
 	prev := h.current
 	h.current = sess
 	stderr := &tailBuffer{max: 4096}
@@ -380,6 +391,9 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	exited := make(chan error, 1)
 	go func() {
 		err := cmd.Wait()
+		h.mu.Lock()
+		sess.bubble = nil
+		h.mu.Unlock()
 		stopBubble()
 		h.mu.Lock()
 		if h.ownsCache(sess) {
@@ -411,6 +425,20 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	}
 
 	return nil
+}
+
+// CycleCamera returns ErrNoCameraBubble when the recording has no round camera.
+func (h *RecordingHandler) CycleCamera() (string, error) {
+	h.mu.Lock()
+	var bubble stopper
+	if h.current != nil {
+		bubble = h.current.bubble
+	}
+	h.mu.Unlock()
+	if bubble == nil {
+		return "", ErrNoCameraBubble
+	}
+	return bubble.Cycle()
 }
 
 func (h *RecordingHandler) earlyFailure(sess *recordSession, file string, err error, stderr *tailBuffer) error {

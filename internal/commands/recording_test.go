@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"errors"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/gui"
 	"github.com/chmouel/tequilashot/internal/state"
 	"github.com/chmouel/tequilashot/internal/sway"
 )
@@ -231,7 +233,10 @@ type fakeBubble struct{ stopped chan struct{} }
 
 func (b *fakeBubble) Stop() { close(b.stopped) }
 
+func (b *fakeBubble) Cycle() (string, error) { return external.CameraTopLeft, nil }
+
 func TestRoundCameraBubbleFollowsRecorder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	stubRecorder(t, "exec sleep 30\n")
 	h, st := newTestHandler(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -242,14 +247,14 @@ func TestRoundCameraBubbleFollowsRecorder(t *testing.T) {
 
 	bubble := &fakeBubble{stopped: make(chan struct{})}
 	var placed [3]int
-	startBubble = func(_ external.CameraOverlay, x, y, d int) (stopper, error) {
+	startBubble = func(_ external.CameraOverlay, x, y, d int, _ image.Rectangle) (stopper, error) {
 		placed = [3]int{x, y, d}
 		return bubble, nil
 	}
 	outputGeometry = func(context.Context, string) (string, error) { return "1600,0 1600x900", nil }
 	t.Cleanup(func() {
-		startBubble = func(c external.CameraOverlay, x, y, d int) (stopper, error) {
-			return external.StartCameraBubble(c, x, y, d)
+		startBubble = func(c external.CameraOverlay, x, y, d int, area image.Rectangle) (stopper, error) {
+			return external.StartCameraBubble(c, x, y, d, area)
 		}
 		outputGeometry = sway.GetOutputGeometry
 	})
@@ -274,12 +279,12 @@ func TestRoundCameraBubbleFollowsRecorder(t *testing.T) {
 func TestRoundCameraFailureStopsBeforeRecording(t *testing.T) {
 	stubRecorder(t, "touch \"$out\"\nexec sleep 30\n")
 	h, st := newTestHandler(t)
-	startBubble = func(external.CameraOverlay, int, int, int) (stopper, error) {
+	startBubble = func(external.CameraOverlay, int, int, int, image.Rectangle) (stopper, error) {
 		return nil, errors.New("camera /dev/video0 could not be opened")
 	}
 	t.Cleanup(func() {
-		startBubble = func(c external.CameraOverlay, x, y, d int) (stopper, error) {
-			return external.StartCameraBubble(c, x, y, d)
+		startBubble = func(c external.CameraOverlay, x, y, d int, area image.Rectangle) (stopper, error) {
+			return external.StartCameraBubble(c, x, y, d, area)
 		}
 	})
 
@@ -289,5 +294,56 @@ func TestRoundCameraFailureStopsBeforeRecording(t *testing.T) {
 	}
 	if st.GetState().Recording {
 		t.Error("a recording started without its camera")
+	}
+}
+
+func TestCycleCameraSessionRouting(t *testing.T) {
+	bubble := &fakeBubble{stopped: make(chan struct{})}
+	recording := NewRecordingHandler(nil, state.NewState())
+	virtual := NewVirtualCameraHandler(nil, state.NewState())
+	if _, err := recording.CycleCamera(); !errors.Is(err, ErrNoCameraBubble) {
+		t.Fatalf("inactive recording: %v", err)
+	}
+	if _, err := virtual.CycleCamera(); !errors.Is(err, ErrNoCameraBubble) {
+		t.Fatalf("inactive virtual camera: %v", err)
+	}
+	recording.current = &recordSession{bubble: bubble}
+	virtual.current = &virtualSession{bubble: bubble}
+	for _, cycle := range []func() (string, error){recording.CycleCamera, virtual.CycleCamera} {
+		position, err := cycle()
+		if err != nil || position != external.CameraTopLeft {
+			t.Fatalf("cycle returned %q, %v", position, err)
+		}
+	}
+}
+
+func TestRoundCameraUsesRememberedPosition(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := gui.RememberCameraPosition(external.CameraTopLeft); err != nil {
+		t.Fatal(err)
+	}
+	old := startBubble
+	t.Cleanup(func() { startBubble = old })
+	var got [3]int
+	startBubble = func(_ external.CameraOverlay, x, y, d int, area image.Rectangle) (stopper, error) {
+		got = [3]int{x, y, d}
+		if area != image.Rect(100, 200, 1100, 800) {
+			t.Errorf("recorded area = %v", area)
+		}
+		return &fakeBubble{stopped: make(chan struct{})}, nil
+	}
+	cam := external.CameraOverlay{Device: "/dev/video0", Shape: external.CameraCircle}
+	if _, err := showBubble(context.Background(), "100,200 1000x600", "", cam); err != nil {
+		t.Fatal(err)
+	}
+	if got != [3]int{120, 218, 141} {
+		t.Fatalf("remembered top-left = %v", got)
+	}
+	cam.Position = external.CameraBottomRight
+	if _, err := showBubble(context.Background(), "100,200 1000x600", "", cam); err != nil {
+		t.Fatal(err)
+	}
+	if got != [3]int{939, 641, 141} {
+		t.Fatalf("explicit bottom-right = %v", got)
 	}
 }

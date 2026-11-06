@@ -1,6 +1,7 @@
 package external
 
 import (
+	"image"
 	"os"
 	"path/filepath"
 	"slices"
@@ -48,7 +49,7 @@ func TestCameraValidate(t *testing.T) {
 	if err := round.Validate(); err != nil {
 		t.Fatalf("round camera without background rejected: %v", err)
 	}
-	if args := round.bubbleArgs(0, 0, 100); !slices.Contains(args, "--remove-background") || !slices.Contains(args, "--no-ring") {
+	if args := round.bubbleArgs(0, 0, 100, image.Rect(0, 0, 1920, 1080)); !slices.Contains(args, "--remove-background") || !slices.Contains(args, "--no-ring") {
 		t.Errorf("bubble arguments miss the cut-out flags: %v", args)
 	}
 	bad := []CameraOverlay{
