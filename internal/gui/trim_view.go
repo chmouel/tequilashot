@@ -21,6 +21,8 @@ import (
 const pageTrim = "trim"
 
 type trimView struct {
+	shortStart, shortEnd, shortCut               *gtk.Button
+	previewSegments                              []trimSegment
 	framePauseTimer                              glib.SourceHandle
 	display                                      *gtk.Stack
 	frameImage                                   *gtk.Picture
@@ -189,6 +191,17 @@ func (a *app) buildTrim() *gtk.Box {
 	t.position.SetXAlign(1)
 	playback.Append(t.position)
 	t.controls.Append(playback)
+	edges := gtk.NewBox(gtk.OrientationHorizontal, 8)
+	t.shortStart = gtk.NewButtonWithLabel("Preview start")
+	t.shortStart.ConnectClicked(func() { a.startTrimPreview(trimPreviewStart) })
+	edges.Append(t.shortStart)
+	t.shortEnd = gtk.NewButtonWithLabel("Preview end")
+	t.shortEnd.ConnectClicked(func() { a.startTrimPreview(trimPreviewEnd) })
+	edges.Append(t.shortEnd)
+	t.shortCut = gtk.NewButtonWithLabel("Preview cut")
+	t.shortCut.ConnectClicked(func() { a.startTrimPreview(trimPreviewCut) })
+	edges.Append(t.shortCut)
+	t.controls.Append(edges)
 	frames := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	t.previousFrame = gtk.NewButtonWithLabel("Previous frame")
 	t.previousFrame.SetTooltipText("Previous frame (Left)")
@@ -451,7 +464,9 @@ func (a *app) updateTrim() {
 	t.end.SetValue(t.selection.end.Seconds())
 	t.syncing = false
 	t.previewing = false
+	t.previewSegments = nil
 	t.playOnSeek = false
+	a.syncTrimShortPreviews()
 	segments, err := t.selection.segments()
 	valid := err == nil
 	changed := t.selection.remove || t.selection.start > 0 || t.selection.end < t.selection.duration
@@ -511,15 +526,18 @@ func (a *app) toggleTrimPlayback() {
 	}
 }
 
-func (a *app) previewTrim() {
+func (a *app) previewTrim() { a.startTrimPreview(trimPreviewFull) }
+
+func (a *app) startTrimPreview(kind trimPreviewKind) {
 	t := &a.trim
-	segments, err := t.selection.segments()
-	if err != nil || t.media == nil || !t.media.IsSeekable() {
+	segments, err := t.selection.previewSegments(kind)
+	if err != nil || t.export != nil || t.media == nil || !t.media.IsSeekable() {
 		return
 	}
 	t.media.Pause()
 	a.seekTrim(segments[0].start)
 	t.previewing = true
+	t.previewSegments = segments
 	t.segment = 0
 	t.lastSeek = time.Time{}
 	t.playOnSeek = true
@@ -555,8 +573,8 @@ func (a *app) tickTrim() bool {
 		t.previewing = false
 	}
 	if t.previewing && t.media.Playing() && !seeking {
-		segments, err := t.selection.segments()
-		if err == nil && t.playhead >= segments[t.segment].end {
+		segments := t.previewSegments
+		if t.playhead >= segments[t.segment].end {
 			t.segment++
 			if t.segment == len(segments) {
 				t.media.Pause()
@@ -575,6 +593,7 @@ func (a *app) tickTrim() bool {
 	t.play.SetSensitive(t.media.IsPrepared() && trimMediaError(t.media) == nil)
 	segments, err := t.selection.segments()
 	t.preview.SetSensitive(err == nil && len(segments) > 0 && t.media.IsSeekable() && trimMediaError(t.media) == nil)
+	a.syncTrimShortPreviews()
 	a.syncTrimFrameControls()
 	t.position.SetText(trimClock(t.playhead) + " / " + trimClock(t.selection.duration))
 	t.timeline.QueueDraw()
@@ -771,4 +790,19 @@ func (a *app) trimHistoryShortcut(key uint, mods gdk.ModifierType) bool {
 	}
 	a.restoreTrimEdit(mods&gdk.ShiftMask != 0)
 	return true
+}
+
+func (a *app) syncTrimShortPreviews() {
+	t := &a.trim
+	if t.shortStart == nil {
+		return
+	}
+	t.shortStart.SetVisible(!t.selection.remove)
+	t.shortEnd.SetVisible(!t.selection.remove)
+	t.shortCut.SetVisible(t.selection.remove)
+	_, err := t.selection.segments()
+	ready := err == nil && t.media != nil && t.media.IsSeekable() && trimMediaError(t.media) == nil && t.export == nil
+	t.shortStart.SetSensitive(ready)
+	t.shortEnd.SetSensitive(ready)
+	t.shortCut.SetSensitive(ready)
 }

@@ -15,7 +15,7 @@ Run it on an isolated display with:
 
 ```sh
 dbus-run-session -- xvfb-run -a env GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
-  TEQUILASHOT_TEST_GUI=1 go test ./internal/gui -run '^TestTrim(Playback|Import|HistoryInteraction|FrameInteraction|SparseAndPlayingFrames)$' -count=1
+  TEQUILASHOT_TEST_GUI=1 go test ./internal/gui -run '^TestTrim(Playback|Import|HistoryInteraction|FrameInteraction|SparseAndPlayingFrames|ShortPreview)$' -count=1
 ```
 
 Frame interaction checks read binary frame markers from the displayed texture

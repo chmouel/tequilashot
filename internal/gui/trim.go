@@ -214,3 +214,37 @@ func (h *trimHistory) restore(redo bool) (trimSelection, bool) {
 	h.index = next
 	return h.states[next], true
 }
+
+type trimPreviewKind uint8
+
+const (
+	trimPreviewFull trimPreviewKind = iota
+	trimPreviewStart
+	trimPreviewEnd
+	trimPreviewCut
+)
+
+func (s trimSelection) previewSegments(kind trimPreviewKind) ([]trimSegment, error) {
+	segments, err := s.segments()
+	if err != nil || kind == trimPreviewFull {
+		return segments, err
+	}
+	const contextLength = 2 * time.Second
+	switch {
+	case !s.remove && kind == trimPreviewStart:
+		return []trimSegment{{s.start, min(s.end, s.start+contextLength)}}, nil
+	case !s.remove && kind == trimPreviewEnd:
+		return []trimSegment{{max(s.start, s.end-contextLength), s.end}}, nil
+	case s.remove && kind == trimPreviewCut:
+		for i, span := range segments {
+			if span.end <= s.start {
+				segments[i].start = max(span.start, span.end-contextLength)
+			} else {
+				segments[i].end = min(span.end, span.start+contextLength)
+			}
+		}
+		return segments, nil
+	default:
+		return nil, errors.New("choose a preview for the current selection mode")
+	}
+}
