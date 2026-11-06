@@ -493,7 +493,7 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 		return fmt.Errorf("failed to stop recording: %w", err)
 	}
 	h.mu.Unlock()
-	_ = notify.Send(2000, h.cfg.ScreenshotIcon, "Recording finished, saving")
+	_ = sendNotification(2000, h.cfg.RecordingStopIcon, "Saving recording", "Please wait whilst the video is finalised.")
 
 	if err := waitForExit(pid, 30*time.Second); err != nil {
 		return err
@@ -513,7 +513,7 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 	}
 
 	if _, err := os.Stat(mp4File); err != nil {
-		_ = notify.Send(5000, h.cfg.ScreenshotIcon, fmt.Sprintf("Could not find %s", mp4File))
+		_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Recording file not found", mp4File)
 		return fmt.Errorf("recording file not found: %s", mp4File)
 	}
 
@@ -522,20 +522,20 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 	}
 
 	if quiet {
-		_ = notify.Send(2000, h.cfg.RecordingStopIcon, "Recording saved")
+		_ = sendNotification(2000, h.cfg.RecordingStopIcon, "Recording saved", filepath.Base(mp4File))
 		return nil
 	}
 
-	actions := map[string]string{
-		"copypath": "Copy path",
-		"show":     "Show",
-		"rename":   "Rename",
-		"delete":   "Delete",
+	actions := []notify.Action{
+		{ID: "show", Label: "Show"},
+		{ID: "copypath", Label: "Copy path"},
+		{ID: "rename", Label: "Rename"},
+		{ID: "delete", Label: "Delete"},
 	}
 
-	action, err := notify.SendWithActions(30000, h.cfg.RecordingStopIcon, filepath.Base(mp4File), actions)
+	action, err := notify.SendWithActions(30000, h.cfg.RecordingStopIcon, "Recording saved", filepath.Base(mp4File), actions)
 	if err != nil {
-		_ = notify.Send(5000, h.cfg.RecordingStopIcon, fmt.Sprintf("%s is available", filepath.Base(mp4File)))
+		_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Recording saved", filepath.Base(mp4File))
 		return nil
 	}
 
@@ -587,9 +587,9 @@ func (h *RecordingHandler) PauseRecording(ctx context.Context) error {
 	h.state.SetPaused(newPausedState)
 
 	if newPausedState {
-		_ = notify.Send(2000, h.cfg.RecordingPauseIcon, "Recording paused")
+		_ = sendNotification(2000, h.cfg.RecordingPauseIcon, "Recording paused", "")
 	} else {
-		_ = notify.Send(2000, h.cfg.RecordingStartIcon, "Recording resumed")
+		_ = sendNotification(2000, h.cfg.RecordingStartIcon, "Recording resumed", "")
 	}
 
 	return nil

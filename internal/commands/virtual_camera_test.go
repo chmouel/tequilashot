@@ -53,10 +53,10 @@ func stubVirtualCamera(t *testing.T, cam liveCamera, startErr error) (*[]externa
 	focusedWindowGeometry = func(context.Context) (string, error) { return "5,6 700x500", nil }
 	slurpRegion = func(context.Context, string) (string, error) { return "1,2 300x200", nil }
 	outputGeometry = func(context.Context, string) (string, error) { return "0,0 1920x1080", nil }
-	sendNotification = func(_ int, _, msg string) error {
+	sendNotification = func(_ int, _, title, body string) error {
 		mu.Lock()
 		defer mu.Unlock()
-		notes = append(notes, msg)
+		notes = append(notes, title+": "+body)
 		return nil
 	}
 	return &specs, func() []string {

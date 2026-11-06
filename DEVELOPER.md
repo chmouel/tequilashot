@@ -27,11 +27,11 @@ dialogue and round camera, and `pkg/protocol` defines the socket messages.
 ## Screenshots
 
 `make screenshots` rebuilds the dialogue and social-preview images in
-`.github/screenshots`. It needs a Hyprland session, `grim`, FFmpeg, Pillow, the
-Inter Display font and the GTK development files. The script builds the `demo`
-binary, opens each page in turn and captures it. The demo stages sample
-windows, a webcam silhouette and media files, so no real desktop content is
-recorded.
+`.github/screenshots`. It needs a Hyprland session, `grim`, FFmpeg,
+`rsvg-convert`, Pillow, the Inter Display font and the GTK development files.
+The script builds the `demo` binary, opens each page in turn and captures it.
+The demo stages sample windows, a webcam silhouette and media files, so no real
+desktop content is recorded.
 
 Leave the desktop alone while it runs. If another floating window overlaps the
 dialogue, or its workspace is not visible, the script stops without writing any

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/chmouel/tequilashot/internal/external"
-	"github.com/chmouel/tequilashot/internal/notify"
 )
 
 type replaySession struct {
@@ -138,7 +137,7 @@ func (h *RecordingHandler) StartReplay(ctx context.Context, output string, curre
 				}
 				h.state.SetReplay(true, output, seconds)
 				h.mu.Unlock()
-				_ = notify.Send(2000, h.cfg.RecordingStartIcon, "Replay buffering started")
+				_ = sendNotification(2000, h.cfg.RecordingStartIcon, "Replay buffering started", fmt.Sprintf("Keeping the last %d seconds of %s.", seconds, output))
 				return nil
 			}
 		}
@@ -160,7 +159,7 @@ func (h *RecordingHandler) watchReplay(sess *replaySession, stderr *tailBuffer) 
 		}
 		file := filepath.Join(sess.dir, entry.Name())
 		if _, saveErr := h.keepReplay(file, sess.dir); saveErr != nil {
-			_ = notify.Send(5000, h.cfg.RecordingStopIcon, "Replay file retained at "+file)
+			_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Replay file retained", file)
 		}
 	}
 	_ = os.Remove(sess.dir)
@@ -172,7 +171,7 @@ func (h *RecordingHandler) watchReplay(sess *replaySession, stderr *tailBuffer) 
 	}
 	h.mu.Unlock()
 	if !sess.stopping.Load() {
-		_ = notify.Send(5000, h.cfg.RecordingStopIcon, fmt.Sprintf("Replay buffering stopped: %v %s", err, stderr.String()))
+		_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Replay buffering stopped", fmt.Sprintf("%v %s", err, stderr.String()))
 	}
 	close(sess.cleaned)
 }
@@ -215,7 +214,7 @@ func (h *RecordingHandler) SaveReplay(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	_ = notify.Send(2000, h.cfg.RecordingStopIcon, "Replay saved: "+filepath.Base(file))
+	_ = sendNotification(2000, h.cfg.RecordingStopIcon, "Replay saved", filepath.Base(file))
 	return file, nil
 }
 
@@ -285,7 +284,7 @@ func (h *RecordingHandler) StopReplay(ctx context.Context) error {
 	}
 	release()
 	<-sess.cleaned
-	_ = notify.Send(2000, h.cfg.RecordingStopIcon, "Replay buffering stopped")
+	_ = sendNotification(2000, h.cfg.RecordingStopIcon, "Replay buffering stopped", "")
 	return nil
 }
 

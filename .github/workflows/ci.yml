@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
-          pacman -Syu --noconfirm --needed base-devel git go gtk4 libadwaita libgirepository golangci-lint gofumpt uv
+          pacman -Syu --noconfirm --needed base-devel dbus git go gtk4 libadwaita libgirepository golangci-lint gofumpt uv
 
       - uses: actions/checkout@v6
         with:

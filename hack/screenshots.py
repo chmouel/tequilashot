@@ -6,9 +6,10 @@ screenshot and a recording, so no real desktop content is captured), grabs each 
 Hyprland session with grim and composes the results with Pillow.
 
 Usage: python3 hack/screenshots.py   (or: make screenshots)
-Needs: Hyprland, grim, ffmpeg, Pillow, Inter Display font, GTK4/libadwaita.
+Needs: Hyprland, grim, ffmpeg, rsvg-convert, Pillow, Inter Display font, GTK4/libadwaita.
 """
 
+import io
 import json
 import os
 import random
@@ -308,65 +309,28 @@ def hero(shots):
 
 
 def logo(size):
-    scale = 4
-    extent = size * scale
-    factor = extent / 512
-    img = Image.new("RGBA", (extent, extent), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle((0, 0, extent - 1, extent - 1), radius=round(extent * 0.23), fill=GRAPHITE + (255,))
-
-    mask = Image.new("L", (extent, extent), 0)
-    cut = ImageDraw.Draw(mask)
-    cut.rounded_rectangle(tuple(round(v * factor) for v in (64, 64, 448, 448)),
-                          radius=round(82 * factor), fill=255)
-    cut.rounded_rectangle(tuple(round(v * factor) for v in (124, 124, 388, 388)),
-                          radius=round(42 * factor), fill=0)
-    cut.rectangle(tuple(round(v * factor) for v in (56, 216, 132, 296)), fill=0)
-    cut.rectangle(tuple(round(v * factor) for v in (380, 216, 456, 296)), fill=0)
-    cut.polygon([tuple(round(v * factor) for v in p) for p in
-                 ((168, 424), (220, 372), (240, 392), (256, 336), (272, 392), (292, 372), (344, 424))],
-                fill=0)
-    mark = Image.new("RGBA", (extent, extent), PALE_TEAL + (255,))
-    img.paste(mark, (0, 0), mask)
-    return img.resize((size, size), Image.Resampling.LANCZOS)
+    png = subprocess.run(
+        ["rsvg-convert", "--width", str(size * 2), "--height", str(size * 2),
+         str(ROOT / "assets" / "tequilashot-mark-inverse.svg")],
+        check=True, capture_output=True).stdout
+    return Image.open(io.BytesIO(png)).convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
 
 
 def social(shots):
-    w, h = 1280, 640
-    canvas = backdrop(w, h, 5)
+    w, h = 1200, 630
+    canvas = Image.new("RGBA", (w, h), "#191A1D")
     d = ImageDraw.Draw(canvas)
-    left, right_edge = 72, 0
+    left = 56
+    canvas.alpha_composite(logo(148), (left - 12, 64))
+    d.text((left, 236), "tequilashot", font=font(68, "SemiBold"), fill="#FFF3D6")
+    d.multiline_text((left + 2, 338), "Screenshots and recordings\nfor Sway and Hyprland.",
+                     font=font(27, "Medium"), fill="#D5D1C9", spacing=10)
+    d.text((left + 2, 550), "github.com/chmouel/tequilashot", font=font(20, "Medium"), fill="#FFB32C")
 
-    def text(xy, value, fnt, **kw):
-        nonlocal right_edge
-        box = d.multiline_textbbox(xy, value, font=fnt, **{k: v for k, v in kw.items() if k == "spacing"})
-        right_edge = max(right_edge, box[2])
-        d.multiline_text(xy, value, font=fnt, **kw)
-        return box
-
-    canvas.alpha_composite(logo(88), (left, 84))
-    text((left, 196), "tequilashot", font(68, "Bold"), fill="white")
-    text((left + 2, 290), "Screenshots and GPU-accelerated\nrecordings for Sway\nand Hyprland",
-         font(28, "Medium"), fill=(255, 255, 255, 235), spacing=8)
-
-    chip_font = font(21, "SemiBold")
-    x, y = left + 2, 432
-    for row in (("Sway", "Hyprland", "GTK 4"), ("GPU Screen Recorder", "Webcam overlay")):
-        for chip in row:
-            tw = d.textlength(chip, font=chip_font)
-            d.rounded_rectangle((x, y, x + tw + 30, y + 42), radius=21,
-                                fill=(26, 45, 46, 235), outline=PALE_TEAL + (90,), width=1)
-            d.text((x + 15, y + 9), chip, font=chip_font, fill="white")
-            right_edge = max(right_edge, x + tw + 30)
-            x += tw + 30 + 10
-        x, y = left + 2, y + 52
-
-    # Fit the dialogue into whatever the text leaves free on the right.
     win = rounded(shots["monitor"])
-    room = w - right_edge - 48 - 48
-    scale = min((h - 80) / win.height, room / win.width)
-    win = win.resize((int(win.width * scale), int(win.height * scale)), Image.LANCZOS)
-    paste_with_shadow(canvas, win, (w - win.width - 48, (h - win.height) // 2))
+    scale = min(466 / win.height, 600 / win.width)
+    win = win.resize((round(win.width * scale), round(win.height * scale)), Image.Resampling.LANCZOS)
+    paste_with_shadow(canvas, win, (w - win.width - 44, (h - win.height) // 2), alpha=85)
     return canvas.convert("RGB")
 
 

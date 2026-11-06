@@ -127,7 +127,7 @@ func (h *ScreenshotHandler) CurrentWindowFile(ctx context.Context, delay int) er
 		return fmt.Errorf("failed to capture screenshot: %w", err)
 	}
 
-	return notify.Send(3000, h.cfg.ScreenshotIcon, fmt.Sprintf("Screenshot saved: %s", filepath.Base(file))) //nolint:errcheck
+	return notify.Send(3000, h.cfg.ScreenshotIcon, "Screenshot saved", filepath.Base(file))
 }
 
 // CurrentScreenClipboard captures the current screen and copies it to clipboard.
@@ -170,18 +170,17 @@ func (h *ScreenshotHandler) SelectionFile(ctx context.Context, delay int) error 
 		return fmt.Errorf("failed to capture screenshot: %w", err)
 	}
 
-	// Show notification with actions
-	actions := map[string]string{
-		"copyclip": "Copy image",
-		"rename":   "Rename",
-		"copypath": "Copy path",
-		"edit":     "Edit",
+	actions := []notify.Action{
+		{ID: "copyclip", Label: "Copy image"},
+		{ID: "copypath", Label: "Copy path"},
+		{ID: "edit", Label: "Edit"},
+		{ID: "rename", Label: "Rename"},
 	}
 
-	action, err := notify.SendWithActions(30000, h.cfg.ScreenshotIcon, filepath.Base(file), actions)
+	action, err := notify.SendWithActions(30000, h.cfg.ScreenshotIcon, "Screenshot saved", filepath.Base(file), actions)
 	if err != nil {
 		// Action selection failed, but screenshot was saved
-		return notify.Send(5000, h.cfg.ScreenshotIcon, fmt.Sprintf("Screenshot saved: %s", filepath.Base(file)))
+		return notify.Send(5000, h.cfg.ScreenshotIcon, "Screenshot saved", filepath.Base(file))
 	}
 
 	action = strings.TrimSpace(action)
@@ -271,14 +270,13 @@ func (h *ScreenshotHandler) SelectionClipboard(ctx context.Context, delay int) e
 		return err
 	}
 
-	// Show notification with actions
-	actions := map[string]string{
-		"save":   "Save",
-		"saveai": "Save with AI",
-		"edit":   "Edit",
+	actions := []notify.Action{
+		{ID: "save", Label: "Save"},
+		{ID: "saveai", Label: "Save with AI"},
+		{ID: "edit", Label: "Edit"},
 	}
 
-	action, err := notify.SendWithActions(30000, h.cfg.ScreenshotIcon, "Screenshot captured to clipboard", actions)
+	action, err := notify.SendWithActions(30000, h.cfg.ScreenshotIcon, "Screenshot copied", "The image is ready to paste from the clipboard.", actions)
 	if err != nil {
 		return nil // Clipboard copy succeeded, ignore action error
 	}

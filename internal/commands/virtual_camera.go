@@ -125,7 +125,7 @@ func (h *VirtualCameraHandler) Start(ctx context.Context, opts VirtualCameraOpti
 	if backend == external.VirtualCameraPipeWire {
 		where = "PipeWire"
 	}
-	_ = sendNotification(3000, h.cfg.RecordingStartIcon, fmt.Sprintf("Virtual camera live (%s)", where))
+	_ = sendNotification(3000, h.cfg.RecordingStartIcon, "Virtual camera live", where)
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (h *VirtualCameraHandler) watch(sess *virtualSession) {
 	<-sess.cam.Done()
 	h.finish(sess)
 	if !sess.cam.Stopped() {
-		_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Virtual camera stopped: "+sess.cam.Failure())
+		_ = sendNotification(5000, h.cfg.RecordingStopIcon, "Virtual camera stopped", sess.cam.Failure())
 	}
 }
 
@@ -194,7 +194,7 @@ func (h *VirtualCameraHandler) Stop(context.Context) error {
 	}
 	sess.cam.Stop()
 	h.finish(sess)
-	_ = sendNotification(2000, h.cfg.RecordingStopIcon, "Virtual camera stopped")
+	_ = sendNotification(2000, h.cfg.RecordingStopIcon, "Virtual camera stopped", "")
 	return nil
 }
 

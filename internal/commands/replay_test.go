@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -89,9 +88,9 @@ func newReplayTestHandler(t *testing.T) (*RecordingHandler, *state.State) {
 	if err := os.WriteFile(filepath.Join(dir, "gpu-screen-recorder"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "notify-send"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	originalNotify := sendNotification
+	sendNotification = func(int, string, string, string) error { return nil }
+	t.Cleanup(func() { sendNotification = originalNotify })
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	h, st := newTestHandler(t)
 	t.Cleanup(h.ShutdownReplay)
@@ -281,15 +280,13 @@ func TestReplayLateSaveRecoveredOnStop(t *testing.T) {
 
 func TestReplaySavedNotificationDoesNotBlockShutdown(t *testing.T) {
 	h, _ := newReplayTestHandler(t)
-	notifier, err := exec.LookPath("notify-send")
-	if err != nil {
-		t.Fatal(err)
-	}
-	markers := t.TempDir()
-	started, unblock := filepath.Join(markers, "started"), filepath.Join(markers, "unblock")
-	script := "#!/bin/sh\ncase \"$*\" in\n*\"Replay saved\"*)\n  touch \"" + started + "\"\n  while [ ! -e \"" + unblock + "\" ]; do sleep 0.01; done;;\nesac\nexit 0\n"
-	if err := os.WriteFile(notifier, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	started, unblock := make(chan struct{}), make(chan struct{})
+	sendNotification = func(_ int, _, title, _ string) error {
+		if title == "Replay saved" {
+			close(started)
+			<-unblock
+		}
+		return nil
 	}
 	if err := h.StartReplay(context.Background(), "DP-1", false, 60, external.AudioSources{}); err != nil {
 		t.Fatal(err)
@@ -300,20 +297,15 @@ func TestReplaySavedNotificationDoesNotBlockShutdown(t *testing.T) {
 		saved <- err
 	}()
 	defer func() {
-		_ = os.WriteFile(unblock, nil, 0o600)
+		close(unblock)
 		if err := <-saved; err != nil {
 			t.Errorf("save: %v", err)
 		}
 	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if _, err := os.Stat(started); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("saved notification was never sent")
-		}
-		time.Sleep(5 * time.Millisecond)
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("saved notification was never sent")
 	}
 	shutdown := make(chan struct{})
 	go func() {

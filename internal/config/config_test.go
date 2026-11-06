@@ -36,6 +36,11 @@ func TestLoadUsesTequilashotIdentity(t *testing.T) {
 	if cfg.WaybarPollInterval != 250*time.Millisecond {
 		t.Errorf("WaybarPollInterval = %s, want 250ms", cfg.WaybarPollInterval)
 	}
+	for _, icon := range []string{cfg.ScreenshotIcon, cfg.RecordingStartIcon, cfg.RecordingStopIcon, cfg.RecordingPauseIcon} {
+		if icon != "com.chmouel.Tequilashot.Recorder" {
+			t.Errorf("notification icon = %q, want Tequilashot logo", icon)
+		}
+	}
 	if _, err := os.Stat(saveLocation); err != nil {
 		t.Errorf("save location was not created: %v", err)
 	}

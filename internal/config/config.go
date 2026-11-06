@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const notificationIcon = "com.chmouel.Tequilashot.Recorder"
+
 // Config holds all configuration for tequilashot.
 type Config struct {
 	SaveLocation       string
@@ -35,10 +37,10 @@ func Load() (*Config, error) {
 		CacheFile:          filepath.Join(homeDir, ".cache", ".tequilashot-recording"),
 		CleanupTime:        3 * 24 * time.Hour, // 3 days
 		AIModelImage:       getEnv("TEQUILASHOT_AI_MODEL", "gemini:gemini-2.5-flash-image"),
-		ScreenshotIcon:     filepath.Join(homeDir, ".local", "share", "icons", "screenshot.svg"),
-		RecordingStartIcon: filepath.Join(homeDir, ".local", "share", "icons", "record-start.svg"),
-		RecordingStopIcon:  filepath.Join(homeDir, ".local", "share", "icons", "record-stop.svg"),
-		RecordingPauseIcon: filepath.Join(homeDir, ".local", "share", "icons", "record-pause.svg"),
+		ScreenshotIcon:     notificationIcon,
+		RecordingStartIcon: notificationIcon,
+		RecordingStopIcon:  notificationIcon,
+		RecordingPauseIcon: notificationIcon,
 		SocketPath:         fmt.Sprintf("/run/user/%d/tequilashot.sock", uid),
 		WaybarPollInterval: getPollInterval(),
 	}

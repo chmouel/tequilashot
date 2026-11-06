@@ -1,11 +1,14 @@
 <h1 align="center">
-  <img src="assets/tequilashot-logo.svg" alt="tequilashot" width="420">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/tequilashot-logo-inverse.svg">
+    <img src="assets/tequilashot-logo.svg" alt="tequilashot" width="420">
+  </picture>
 </h1>
 
 <p align="center">Screenshots and screen recordings for Sway and Hyprland, from a small GTK dialogue or the command line.</p>
 
 <p align="center">
-  <img src=".github/screenshots/social-preview.png" alt="Tequilashot capture dialogue with monitor previews, camera options and recording controls">
+  <img src=".github/screenshots/social-preview.png" alt="Tequilashot: screenshots and recordings for Sway and Hyprland, with the capture dialogue">
 </p>
 
 Run `tequilashot` with no arguments to open the capture dialogue. It starts
@@ -200,6 +203,8 @@ command-line tools only.
 Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
 [aichat](https://github.com/sigoden/aichat) (AI-generated file names).
+
+Desktop notifications require a notification service on the session D-Bus.
 
 Tequilashot leaves the encoder to GPU Screen Recorder. It encodes on the GPU
 and does not fall back to the CPU, so hardware H.264 encoding has to work on
