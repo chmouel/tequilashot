@@ -142,7 +142,7 @@ func TestBuildVirtualCameraRequest(t *testing.T) {
 		{SourceWindow, Selection{Geometry: "10,20 800x600"}, map[string]interface{}{"geometry": "10,20 800x600"}},
 		{SourceRegion, Selection{CameraDevice: "/dev/video0"}, map[string]interface{}{
 			"selection": true, "camera": true, "camera_device": "/dev/video0",
-			"camera_position": external.CameraTopLeft, "camera_size": external.CameraMedium, "camera_mirror": false,
+			"camera_position": external.CameraTopLeft, "camera_size": external.CameraMedium, "camera_mirror": false, "camera_remove_background": false, "camera_no_ring": false,
 		}},
 	} {
 		s.Source = tc.source
@@ -217,6 +217,19 @@ func TestBuildRequestCamera(t *testing.T) {
 	o := req.Options
 	if o["camera"] != true || o["camera_device"] != "/dev/video4" || o["camera_position"] != "top-right" || o["camera_size"] != "small" || o["camera_shape"] != "circle" || o["camera_mirror"] != true {
 		t.Errorf("camera options wrong: %+v", o)
+	}
+
+	// Removing the background only applies to the round camera.
+	s.CameraRemoveBackground, s.CameraNoRing = true, true
+	for shape, want := range map[string]bool{"circle": true, "square": false} {
+		s.CameraShape = shape
+		req, _ := BuildRequest(s, Selection{CameraDevice: "/dev/video4"})
+		if req.Options["camera_remove_background"] != want {
+			t.Errorf("%s: camera_remove_background = %v, want %v", shape, req.Options["camera_remove_background"], want)
+		}
+		if req.Options["camera_no_ring"] != want {
+			t.Errorf("%s: camera_no_ring = %v, want %v", shape, req.Options["camera_no_ring"], want)
+		}
 	}
 }
 

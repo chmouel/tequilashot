@@ -1,9 +1,11 @@
 package gui
 
 import (
+	"context"
 	"image"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -140,5 +142,35 @@ func TestRenameTarget(t *testing.T) {
 		if _, err := RenameTarget(old, bad); err == nil {
 			t.Errorf("RenameTarget(%q) should fail", bad)
 		}
+	}
+}
+
+func TestProbeTrimSource(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("FFmpeg is required")
+	}
+	dir := t.TempDir()
+	video := filepath.Join(dir, "vidéo 100% #1.mp4")
+	trimTestCommand(t, "-f", "lavfi", "-i", "color=red:s=160x96:r=10:d=1", "-c:v", "libx264", video)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if info, err := probeTrimSource(ctx, video); err != nil || info.Duration != time.Second {
+		t.Fatalf("valid video: %+v, %v", info, err)
+	}
+	audio := filepath.Join(dir, "audio.m4a")
+	trimTestCommand(t, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "aac", audio)
+	corrupt := filepath.Join(dir, "corrupt.mp4")
+	if err := os.WriteFile(corrupt, []byte("broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{audio, corrupt, dir, filepath.Join(dir, "missing")} {
+		if _, err := probeTrimSource(ctx, file); err == nil {
+			t.Errorf("accepted invalid source %s", file)
+		}
+	}
+	cancelled, stop := context.WithCancel(context.Background())
+	stop()
+	if _, err := probeTrimSource(cancelled, video); err == nil {
+		t.Fatal("cancelled load succeeded")
 	}
 }

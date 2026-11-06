@@ -83,6 +83,31 @@ and does not follow a moving window.
 It needs a GUI build, [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell)
 and a layer-shell compositor such as Sway or Hyprland.
 
+#### Removing the background
+
+Switch on Remove background (`--camera-remove-background`) to show only
+yourself in the circle. Your surroundings become transparent, so the screen
+beneath shows through whilst the white ring stays. It works for the round
+camera in recordings and in the virtual camera, and not for the square one.
+Add Hide ring (`--camera-no-ring`) to drop the white ring as well.
+
+The segmentation runs on the CPU, so expect a lower frame rate than the plain
+camera, roughly six pictures a second on a desktop processor. It is a
+person-segmentation model and will occasionally clip hair or hands. Nothing is
+downloaded behind your back, but the dialogue offers a Download button for the model. You need:
+
+- [ONNX Runtime](https://onnxruntime.ai/) as a shared library, found in the usual
+  system locations or through `TEQUILASHOT_ONNXRUNTIME_LIB`. The Go binding is
+  built for version 1.29.
+- The `u2net_human_seg.onnx` model (Apache-2.0, from the
+  [rembg releases](https://github.com/danielgatis/rembg/releases/tag/v0.0.0)),
+  saved as `~/.local/share/tequilashot/u2net_human_seg.onnx` or named by
+  `TEQUILASHOT_SEGMENTATION_MODEL`.
+
+If either is missing, or the segmentation fails, the round camera is hidden and
+an error is reported instead of showing your real background. A recording or
+the virtual camera that is already running carries on without it.
+
 ### Virtual camera
 
 Camera mode publishes the chosen monitor, window or region as a webcam that
@@ -156,6 +181,29 @@ add Copy image and Edit, which opens [Satty](https://github.com/gabm/satty)
 and reloads the preview on save. New recording, New screenshot or Escape goes
 back to the setup page.
 
+<p align="center">
+  <img src=".github/screenshots/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles" width="60%">
+</p>
+
+Open an existing local video with Open video, or drop one onto the idle window.
+Recordings and saved replays also offer Trim. Drag the two timeline handles
+to select a section, or enter precise start and end times in seconds.
+
+Keep saves the selected section; Cut removes it and joins the remaining
+footage. Preview plays the result before saving, and the icons beside it
+preview the first moments of a kept selection, the last moments before its
+end, or the join left by a cut. Each short preview stops automatically. Click
+the timeline to seek, or step one frame at a time with the chevrons beside
+Play. Left and Right also step one frame whilst the video or timeline has
+focus; hold Shift to jump one second. In and Out set the selection boundary
+at the displayed frame. The timecode beside them follows the playhead. Space
+plays or pauses. Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z) restore edits, and the
+refresh button restores the full selection. Back or Escape returns to the
+previous page.
+
+Save copy creates a uniquely named `-trimmed.mp4` beside the original, which
+is kept. Saving shows progress and can be cancelled.
+
 ## Install
 
 You can install a package or build from source.
@@ -206,7 +254,7 @@ command-line tools only.
 | [slurp](https://github.com/emersion/slurp) | Selecting a region |
 | [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) | Recording video, audio and webcam input |
 | [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Clipboard commands |
-| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera and recording details |
+| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera, recording details and video trimming |
 
 Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
@@ -258,7 +306,8 @@ Recording flags:
 - `--camera`, `-C`: webcam. Tune it with `--camera-device`,
   `--camera-position` (`top-left`, `top-right`, `bottom-left`, `bottom-right`),
   `--camera-size` (`small`, `medium`, `large`), `--camera-mirror` and
-  `--camera-shape circle` for the [round camera](#round-camera).
+  `--camera-shape circle` for the [round camera](#round-camera), which also
+  accepts `--camera-remove-background`.
 - `--crop-top <px>` (screen recordings only): trim pixels from the top.
 
 ### Hyprland key bindings

@@ -35,6 +35,7 @@ type resultView struct {
 	open    *adw.ButtonContent
 	again   *gtk.Button
 	images  *gtk.Box
+	trim    *gtk.Button
 	actions *gtk.Box
 
 	file string
@@ -108,8 +109,10 @@ func (a *app) buildResult() *gtk.Box {
 	r.images.SetHomogeneous(true)
 	r.images.Append(action("Copy image", "edit-copy-symbolic", a.copyResultImage))
 	r.images.Append(action("Edit", "document-edit-symbolic", a.editResult))
+	r.trim = action("Trim", "edit-cut-symbolic", a.openTrim)
 	r.actions = gtk.NewBox(gtk.OrientationVertical, 10)
 	r.actions.Append(r.images)
+	r.actions.Append(r.trim)
 	r.actions.Append(row)
 	r.actions.Append(row2)
 	r.actions.Append(again)
@@ -157,6 +160,7 @@ func (a *app) showResult(file string, info MediaInfo, mode string) {
 	a.pages.SetVisibleChildName(pageResult)
 	image := mode == ModeScreenshot
 	r.images.SetVisible(image)
+	r.trim.SetVisible(!image)
 	if image {
 		a.win.SetTitle("Screenshot saved")
 		r.frame.SetContentFit(gtk.ContentFitContain)

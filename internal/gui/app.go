@@ -56,10 +56,15 @@ flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); 
 .er-layout:focus-visible { outline: 2px solid @accent_bg_color; outline-offset: 2px; }
 .er-prevholder { background: #1e293b; color: #94a3b8; }
 .er-camtile { border-radius: 6px; background: #334155; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px @accent_bg_color; }
-.er-camtile.er-round { border-radius: 9999px; }
+.er-camtile.er-round { border-radius: 9999px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1.5px rgba(255, 255, 255, 0.92); }
+.er-camtile.er-cutout { background: transparent; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.92); }
+.er-camtile.er-noring { box-shadow: none; }
+.er-model-progress { min-width: 110px; }
 .er-cammsg { font-size: 0.7em; color: #cbd5e1; }
 .er-mirror { transform: scale(-1, 1); }
 .er-frame { border-radius: 12px; background: alpha(currentColor, 0.08); }
+.er-selection button { padding-left: 6px; padding-right: 6px; }
+.er-selection spinbutton > button { min-width: 18px; padding-left: 0; padding-right: 0; }
 .er-section { font-weight: 700; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.04em; }
 .er-sponsor { color: #ff69b4; }
 `
@@ -71,6 +76,8 @@ type app struct {
 	toasts       *adw.ToastOverlay
 	pages        *gtk.Stack
 	res          resultView
+	trim         trimView
+	importVideo  trimImport
 	settings     Settings
 	settingsPath string
 	startButton  *gtk.Button
@@ -112,7 +119,16 @@ type app struct {
 	camera         *gtk.ToggleButton
 	cameraRevealer *gtk.Revealer
 	cameraBox      *gtk.Box
+	advancedRow    *adw.ExpanderRow
 	mirror         *adw.SwitchRow
+	cutout         *adw.SwitchRow
+	noRing         *adw.SwitchRow
+	modelRow       *adw.ActionRow
+	modelBtn       *gtk.Button
+	modelProgress  *gtk.ProgressBar
+	modelBusy      bool
+	previewCut     bool
+	previewCutter  *cutter
 	camRow         *adw.ComboRow
 	cameras        []string
 	camModes       []external.CameraMode
@@ -243,7 +259,7 @@ func (a *app) activate() {
 		}
 		return
 	}
-	if a.res.editing {
+	if a.res.editing || a.pages.VisibleChildName() == pageTrim {
 		a.win.Present()
 		return
 	}
@@ -338,10 +354,15 @@ func (a *app) build() {
 			return true
 		}
 		a.closing = true
+		a.cancelTrimImport()
 		a.stopThumbTimer()
 		a.stopPreview()
-		// Wait for the camera off the main loop, then quit.
+		trimDone := a.trim.done
+		a.stopTrim()
 		go func() {
+			if trimDone != nil {
+				<-trimDone
+			}
 			if !a.gate.Wait(previewRelease) {
 				log.Print("camera preview did not exit in time")
 			}
@@ -352,11 +373,30 @@ func (a *app) build() {
 
 	key := gtk.NewEventControllerKey()
 	key.SetPropagationPhase(gtk.PhaseCapture)
-	key.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
+	key.ConnectKeyPressed(func(keyval, _ uint, mods gdk.ModifierType) bool {
+		if a.trimHistoryShortcut(keyval, mods) {
+			return true
+		}
+		if a.res.dialogOpen {
+			return false
+		}
 		switch keyval {
+		case gdk.KEY_space:
+			if !a.aboutOpen && a.pages.VisibleChildName() == pageTrim && a.trim.export == nil {
+				if (a.trim.start.StateFlags()|a.trim.end.StateFlags())&gtk.StateFlagFocusWithin == 0 {
+					a.toggleTrimPlayback()
+					return true
+				}
+			}
 		case gdk.KEY_Escape:
 			if a.aboutOpen {
 				return false
+			}
+			if a.pages.VisibleChildName() == pageTrim {
+				if a.trim.export == nil {
+					a.leaveTrim()
+				}
+				return true
 			}
 			if a.res.editing {
 				return true
@@ -424,6 +464,7 @@ func (a *app) build() {
 	setup.Append(a.cameraRevealer)
 	a.pages.AddNamed(setup, pageSetup)
 	a.pages.AddNamed(a.buildResult(), pageResult)
+	a.pages.AddNamed(a.buildTrim(), pageTrim)
 	a.pages.AddNamed(a.buildReplayControls(), pageReplay)
 	a.pages.SetVisibleChildName(pageSetup)
 	a.pages.NotifyProperty("visible-child-name", a.syncPreview)
@@ -433,6 +474,10 @@ func (a *app) build() {
 
 	root := gtk.NewBox(gtk.OrientationVertical, 0)
 	header := adw.NewHeaderBar()
+	open := gtk.NewButtonWithLabel("Open video")
+	open.ConnectClicked(a.chooseTrimVideo)
+	header.PackStart(open)
+	a.win.AddController(a.trimDropTarget())
 	header.PackEnd(a.headerAction("emote-love-symbolic", "Sponsor Tequilashot", "er-sponsor", a.sponsor))
 	header.PackEnd(a.headerAction("help-about-symbolic", "About Tequilashot", "", a.showAbout))
 	root.Append(header)
@@ -1014,6 +1059,10 @@ func lastDotted(class string) string {
 }
 
 func (a *app) startCapture() {
+	if a.res.dialogOpen {
+		return
+	}
+	a.cancelTrimImport()
 	if a.busy || a.closing {
 		return
 	}

@@ -77,9 +77,9 @@ func TestParseCameraRequest(t *testing.T) {
 	}
 	got := mustParseCamera(t, map[string]any{
 		"camera": true, "camera_device": "/dev/video2", "camera_position": "top-left",
-		"camera_size": "large", "camera_shape": "circle", "camera_mirror": true,
+		"camera_size": "large", "camera_shape": "circle", "camera_mirror": true, "camera_remove_background": true, "camera_no_ring": true,
 	})
-	if !got.enabled || got.overlay.Device != "/dev/video2" || got.overlay.Position != "top-left" || got.overlay.Size != "large" || got.overlay.Shape != "circle" || !got.overlay.Mirror {
+	if !got.enabled || got.overlay.Device != "/dev/video2" || got.overlay.Position != "top-left" || got.overlay.Size != "large" || got.overlay.Shape != "circle" || !got.overlay.Mirror || !got.overlay.RemoveBackground || !got.overlay.NoRing {
 		t.Errorf("unexpected request: %+v", got)
 	}
 }

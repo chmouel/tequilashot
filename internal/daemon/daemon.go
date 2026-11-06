@@ -424,7 +424,7 @@ type cameraRequest struct {
 // recording starts.
 func parseCameraRequest(options map[string]any) (cameraRequest, error) {
 	var req cameraRequest
-	var on, mirror bool
+	var on, mirror, removeBackground, noRing bool
 	var device, position, size, shape string
 	for _, f := range []struct {
 		key string
@@ -436,6 +436,8 @@ func parseCameraRequest(options map[string]any) (cameraRequest, error) {
 		{"camera_size", &size},
 		{"camera_shape", &shape},
 		{"camera_mirror", &mirror},
+		{"camera_remove_background", &removeBackground},
+		{"camera_no_ring", &noRing},
 	} {
 		v, ok := options[f.key]
 		if !ok {
@@ -460,6 +462,6 @@ func parseCameraRequest(options map[string]any) (cameraRequest, error) {
 		return req, nil
 	}
 	req.enabled = true
-	req.overlay = external.CameraOverlay{Device: device, Position: position, Size: size, Shape: shape, Mirror: mirror}
+	req.overlay = external.CameraOverlay{Device: device, Position: position, Size: size, Shape: shape, Mirror: mirror, RemoveBackground: removeBackground, NoRing: noRing}
 	return req, nil
 }

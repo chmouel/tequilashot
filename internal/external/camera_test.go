@@ -3,6 +3,7 @@ package external
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -41,6 +42,13 @@ func TestCameraValidate(t *testing.T) {
 	if err := (CameraOverlay{Device: "/dev/video12"}).Validate(); err != nil {
 		t.Fatalf("defaults rejected: %v", err)
 	}
+	round := CameraOverlay{Device: testCameraDevice, Shape: CameraCircle, RemoveBackground: true, NoRing: true}
+	if err := round.Validate(); err != nil {
+		t.Fatalf("round camera without background rejected: %v", err)
+	}
+	if args := round.bubbleArgs(0, 0, 100); !slices.Contains(args, "--remove-background") || !slices.Contains(args, "--no-ring") {
+		t.Errorf("bubble arguments miss the cut-out flags: %v", args)
+	}
 	bad := []CameraOverlay{
 		{},
 		{Device: "/dev/video0|DP-1"},
@@ -53,6 +61,9 @@ func TestCameraValidate(t *testing.T) {
 		{Device: testCameraDevice, Shape: "oval"},
 		{Device: testCameraDevice, Width: -1},
 		{Device: testCameraDevice, FPS: -1},
+		{Device: testCameraDevice, RemoveBackground: true},
+		{Device: testCameraDevice, Shape: CameraSquare, RemoveBackground: true},
+		{Device: testCameraDevice, Shape: CameraCircle, NoRing: true},
 	}
 	for _, c := range bad {
 		if c.Validate() == nil {

@@ -10,8 +10,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/notify"
 )
 
 const (
@@ -22,8 +25,9 @@ const (
 
 // CameraBubble is the round camera shown on screen whilst recording.
 type CameraBubble struct {
-	cmd  *exec.Cmd
-	done chan struct{}
+	cmd      *exec.Cmd
+	done     chan struct{}
+	stopping atomic.Bool
 }
 
 // bubbleArgs returns the camera-bubble arguments for a circle of the given
@@ -41,6 +45,12 @@ func (c CameraOverlay) bubbleArgs(x, y, diameter int) []string {
 	}
 	if c.Mirror {
 		args = append(args, "--mirror")
+	}
+	if c.RemoveBackground {
+		args = append(args, "--remove-background")
+	}
+	if c.NoRing {
+		args = append(args, "--no-ring")
 	}
 	return args
 }
@@ -89,6 +99,10 @@ func StartCameraBubble(camera CameraOverlay, x, y, diameter int) (*CameraBubble,
 		_, _ = io.Copy(io.Discard, out)
 		_ = cmd.Wait()
 		close(b.done)
+		// The camera hides itself when it fails, so the user is told why.
+		if ok && !b.stopping.Load() {
+			_ = notify.Send(5000, "", "Round camera stopped", bubbleFailure(stderr.String()))
+		}
 	}()
 
 	timer := time.NewTimer(bubbleStartLimit)
@@ -123,6 +137,7 @@ func (b *CameraBubble) Stop() {
 	if b == nil {
 		return
 	}
+	b.stopping.Store(true)
 	_ = b.cmd.Process.Signal(syscall.SIGTERM)
 	select {
 	case <-b.done:

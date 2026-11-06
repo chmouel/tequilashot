@@ -51,6 +51,8 @@ type probeOutput struct {
 	} `json:"streams"`
 	Format struct {
 		Duration string `json:"duration"`
+		Start    string `json:"start_time"`
+		Name     string `json:"format_name"`
 	} `json:"format"`
 }
 
@@ -70,6 +72,12 @@ func ParseProbe(data []byte) (MediaInfo, error) {
 			return MediaInfo{}, fmt.Errorf("invalid duration %q", p.Format.Duration)
 		}
 		info.Duration = time.Duration(secs * float64(time.Second))
+		// Matroska's duration includes a positive timestamp offset
+		if strings.Contains(p.Format.Name, "matroska") || strings.Contains(p.Format.Name, "webm") {
+			if start, err := time.ParseDuration(p.Format.Start + "s"); err == nil && start > 0 && info.Duration > start {
+				info.Duration -= start
+			}
+		}
 	}
 	return info, nil
 }
@@ -142,7 +150,7 @@ func ProbeMedia(ctx context.Context, file string) (MediaInfo, error) {
 		return MediaInfo{}, err
 	}
 	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", //nolint:gosec
-		"format=duration:stream=width,height", "-select_streams", "v:0", "-of", "json", file).Output()
+		"format=duration,start_time,format_name:stream=width,height", "-select_streams", "v:0", "-of", "json", file).Output()
 	if err != nil {
 		return MediaInfo{}, fmt.Errorf("ffprobe: %w", err)
 	}
@@ -198,4 +206,27 @@ func RenameTarget(oldPath, name string) (string, error) {
 		return "", fmt.Errorf("%s already exists", name+ext)
 	}
 	return target, nil
+}
+
+func probeTrimSource(ctx context.Context, file string) (MediaInfo, error) {
+	st, err := os.Stat(file)
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	if !st.Mode().IsRegular() {
+		return MediaInfo{}, errors.New("please select a regular video file")
+	}
+	f, err := os.Open(file) //nolint:gosec
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	_ = f.Close()
+	info, err := ProbeMedia(ctx, file)
+	if err != nil {
+		return MediaInfo{}, err
+	}
+	if info.Duration <= 0 || info.Width <= 0 || info.Height <= 0 {
+		return MediaInfo{}, errors.New("the file needs a video stream and a readable duration")
+	}
+	return info, nil
 }

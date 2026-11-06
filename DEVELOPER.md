@@ -10,6 +10,19 @@ make format   # gofumpt -w .
 make sanity   # lint, format and test
 ```
 
+The trimmer's playback check needs FFmpeg, a GTK media backend and a display.
+Run it on an isolated display with:
+
+```sh
+dbus-run-session -- xvfb-run -a env GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  TEQUILASHOT_TEST_GUI=1 go test ./internal/gui -run '^TestTrim(Playback|Import|HistoryInteraction|FrameInteraction|SparseAndPlayingFrames|ShortPreview)$' -count=1
+```
+
+Frame interaction checks read binary frame markers from the displayed texture
+and compare exported boundary frames. Paused stepping uses FFmpeg stills because
+GTK's GStreamer backend can skip overlapping B-frames in variable-rate videos.
+Frame timestamps are loaded in bounded windows; ordinary playback remains with GTK.
+
 The default build links GTK 4, libadwaita and, at run time, gtk4-layer-shell
 for the round camera. Two build tags change what is compiled:
 
@@ -41,7 +54,7 @@ image. Run `make optimize` afterwards to compress the PNG files with
 To look at one staged page by hand, build the demo binary and set
 `TEQUILASHOT_DEMO` to a page name (`monitor`, `camera-circle`, `window`,
 `result`, `screenshot`, `screenshot-result`, `replay`, `replay-active`,
-`replay-result` or `about`) and
+`replay-result`, `trim` or `about`) and
 `TEQUILASHOT_DEMO_DIR` to a directory holding the staged assets that
 `hack/screenshots.py` writes.
 
@@ -130,6 +143,8 @@ being overwritten. Stopping recovers completed exports left in staging.
 | `camera_size` | `small`, `medium`, `large` | Recordings |
 | `camera_shape` | `square`, `circle` | Recordings |
 | `camera_mirror` | boolean | Recordings |
+| `camera_no_ring` | boolean; hides the ring, needs `camera_remove_background` | Recordings and virtual camera |
+| `camera_remove_background` | boolean; needs the circle shape (always set for the virtual camera) | Recordings and virtual camera |
 | `quiet_finish` | boolean; the finish notification omits its file actions because the client shows the result | Recordings |
 | `start_action` | string, a recording action | `toggle-record` |
 | `icons` | object with `Idle`, `Recording`, `Paused`, `Countdown`, `Live` and `Replay` strings | `waybar-status` |

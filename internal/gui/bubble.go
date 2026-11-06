@@ -5,6 +5,7 @@ package gui
 import (
 	"errors"
 	"fmt"
+	"image"
 	"log"
 	"math"
 	"os"
@@ -31,6 +32,9 @@ type BubbleOptions struct {
 	Height   int
 	FPS      int
 	Mirror   bool
+	// RemoveBackground shows only the person, with the rest transparent.
+	RemoveBackground bool
+	NoRing           bool
 }
 
 // bubbleCSS draws a transparent window holding a circular picture with a ring.
@@ -41,6 +45,8 @@ window.easyshot-bubble, window.easyshot-bubble.background { background: transpar
 	border: %dpx solid rgba(255, 255, 255, 0.92);
 	background: #1e1e1e;
 }
+window.easyshot-bubble .easyshot-bubble-disc.cutout { background: transparent; }
+window.easyshot-bubble .easyshot-bubble-disc.noring { border-color: transparent; }
 .easyshot-bubble-disc picture.mirrored { transform: scale(-1, 1); }
 `
 
@@ -66,6 +72,7 @@ func RunCameraBubble(opts BubbleOptions) error {
 	app := gtk.NewApplication(bubbleAppID, gio.ApplicationNonUnique)
 	var gate external.PreviewGate
 	var preview *external.Preview
+	var cut *cutter
 	var failure error
 
 	sigs := make(chan os.Signal, 1)
@@ -94,10 +101,45 @@ func RunCameraBubble(opts BubbleOptions) error {
 			return
 		}
 
-		latest := &external.LatestFrame{}
 		ready := false
-		preview = external.StartPreview(&gate, opts.Device, opts.Width, opts.Height, opts.FPS,
-			func(frame []byte) {
+		show := func(tex gdk.Paintabler) {
+			pic.SetPaintable(tex)
+			if !ready {
+				ready = true
+				win.SetVisible(true)
+				// Give the compositor a moment to show the first picture.
+				glib.TimeoutAdd(150, func() bool {
+					fmt.Println("ready")
+					return false
+				})
+			}
+		}
+
+		// With the background removed, raw frames never reach the screen: the
+		// window stays hidden until the first cut-out picture is ready, and
+		// hides again if the cutting fails.
+		var onFrame func([]byte)
+		if opts.RemoveBackground {
+			cut = newCutter(
+				func(img *image.RGBA) {
+					glib.IdleAdd(func() {
+						if failure == nil {
+							show(rgbaTexture(img))
+						}
+					})
+				},
+				func(err error) {
+					glib.IdleAdd(func() {
+						pic.SetPaintable(nil)
+						win.SetVisible(false)
+						fail(err)
+					})
+				},
+			)
+			onFrame = cut.Put
+		} else {
+			latest := &external.LatestFrame{}
+			onFrame = func(frame []byte) {
 				if !latest.Put(frame) {
 					return
 				}
@@ -106,22 +148,13 @@ func RunCameraBubble(opts BubbleOptions) error {
 					if data == nil {
 						return
 					}
-					tex, err := gdk.NewTextureFromBytes(glib.NewBytes(data))
-					if err != nil {
-						return
-					}
-					pic.SetPaintable(tex)
-					if !ready {
-						ready = true
-						win.SetVisible(true)
-						// Give the compositor a moment to show the first picture.
-						glib.TimeoutAdd(150, func() bool {
-							fmt.Println("ready")
-							return false
-						})
+					if tex, err := gdk.NewTextureFromBytes(glib.NewBytes(data)); err == nil {
+						show(tex)
 					}
 				})
-			},
+			}
+		}
+		preview = external.StartPreview(&gate, opts.Device, opts.Width, opts.Height, opts.FPS, onFrame,
 			func() {
 				glib.IdleAdd(func() { fail(fmt.Errorf("camera %s could not be opened", opts.Device)) })
 			})
@@ -129,6 +162,9 @@ func RunCameraBubble(opts BubbleOptions) error {
 
 	code := app.Run([]string{os.Args[0]})
 	gate.Retire(preview)
+	if cut != nil {
+		cut.Close()
+	}
 	if !gate.Wait(previewRelease) {
 		log.Print("camera did not close in time")
 	}
@@ -161,6 +197,12 @@ func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Pi
 
 	disc := gtk.NewBox(gtk.OrientationVertical, 0)
 	disc.AddCSSClass("easyshot-bubble-disc")
+	if opts.RemoveBackground {
+		disc.AddCSSClass("cutout")
+		if opts.NoRing {
+			disc.AddCSSClass("noring")
+		}
+	}
 	disc.SetOverflow(gtk.OverflowHidden)
 	disc.SetSizeRequest(opts.Diameter, opts.Diameter)
 	pic.SetVExpand(true)
