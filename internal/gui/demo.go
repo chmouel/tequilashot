@@ -91,6 +91,8 @@ func init() {
 	demoStage = func(a *app) {
 		glib.TimeoutAdd(800, func() bool {
 			switch page {
+			case "about":
+				a.showAbout()
 			case SourceWindow, "screenshot-window":
 				if row := a.winList.RowAtIndex(1); row != nil {
 					a.winList.SelectRow(row)

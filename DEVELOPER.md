@@ -40,8 +40,9 @@ image. Run `make optimize` afterwards to compress the PNG files with
 
 To look at one staged page by hand, build the demo binary and set
 `TEQUILASHOT_DEMO` to a page name (`monitor`, `camera-circle`, `window`,
-`result`, `screenshot` or `screenshot-result`) and `TEQUILASHOT_DEMO_DIR` to a
-directory holding the staged assets that `hack/screenshots.py` writes.
+`result`, `screenshot`, `screenshot-result` or `about`) and
+`TEQUILASHOT_DEMO_DIR` to a directory holding the staged assets that
+`hack/screenshots.py` writes.
 
 ## Releases
 

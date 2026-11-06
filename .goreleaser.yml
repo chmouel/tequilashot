@@ -15,6 +15,7 @@ builds:
     ldflags:
       - -w
       - -s
+      - -X github.com/chmouel/tequilashot/internal/gui.Version={{ .Version }}
   - id: cli
     env:
       - CGO_ENABLED=0
@@ -148,7 +149,6 @@ changelog:
       - '^test(\([^)]+\))?:'
       - '^chore(\([^)]+\))?:'
       - '^ci(\([^)]+\))?:'
-      - '^build(\([^)]+\))?:'
       - "^Brew formula update"
       - Merge pull request
       - Merge branch

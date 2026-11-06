@@ -1,4 +1,5 @@
 NAME = tequilashot
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 all: build
 
@@ -6,7 +7,7 @@ mkdir:
 	mkdir -p bin
 
 build: mkdir
-	go build -o bin/$(NAME) ./cmd/$(NAME)
+	go build -ldflags "-X github.com/chmouel/tequilashot/internal/gui.Version=$(VERSION)" -o bin/$(NAME) ./cmd/$(NAME)
 
 sanity: lint format test
 
