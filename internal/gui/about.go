@@ -64,11 +64,6 @@ func (a *app) modalOpen() bool {
 	return a.aboutOpen || a.prefsOpen
 }
 
-// sponsor opens the sponsorship page in the browser.
-func (a *app) sponsor() {
-	detach("xdg-open", aboutSponsorURL)
-}
-
 // primaryMenu builds the header bar's main menu and registers its actions.
 func (a *app) primaryMenu() *gtk.MenuButton {
 	for name, activate := range map[string]func(){"open-video": a.chooseTrimVideo, "preferences": a.showPreferences, "about": a.showAbout} {
@@ -92,18 +87,6 @@ func (a *app) primaryMenu() *gtk.MenuButton {
 	b.SetTooltipText("Main Menu")
 	b.SetMenuModel(menu)
 	b.SetPrimary(true)
-	return b
-}
-
-// headerAction builds a flat, icon-only header bar button.
-func (a *app) headerAction(icon, tooltip, class string, onClick func()) *gtk.Button {
-	b := gtk.NewButtonFromIconName(icon)
-	b.AddCSSClass("flat")
-	if class != "" {
-		b.AddCSSClass(class)
-	}
-	b.SetTooltipText(tooltip)
-	b.ConnectClicked(onClick)
 	return b
 }
 

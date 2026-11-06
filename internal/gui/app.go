@@ -68,7 +68,6 @@ flowboxchild.er-tilechild:selected { background: alpha(@accent_bg_color, 0.14); 
 .er-selection button { padding-left: 6px; padding-right: 6px; }
 .er-selection spinbutton > button { min-width: 18px; padding-left: 0; padding-right: 0; }
 .er-section { font-weight: 700; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.04em; }
-.er-sponsor { color: #ff69b4; }
 `
 
 type app struct {
@@ -479,7 +478,6 @@ func (a *app) build() {
 	header := adw.NewHeaderBar()
 	a.win.AddController(a.trimDropTarget())
 	header.PackEnd(a.primaryMenu())
-	header.PackEnd(a.headerAction("emote-love-symbolic", "Sponsor Tequilashot", "er-sponsor", a.sponsor))
 	root.Append(header)
 	root.Append(a.toasts)
 	a.win.SetContent(root)
