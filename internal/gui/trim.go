@@ -180,3 +180,37 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 		return target, info, nil
 	}
 }
+
+type trimHistory struct {
+	states []trimSelection
+	index  int
+}
+
+func (h *trimHistory) reset(s trimSelection) { h.states = []trimSelection{s}; h.index = 0 }
+
+func (h *trimHistory) record(s trimSelection) {
+	if len(h.states) == 0 {
+		h.reset(s)
+		return
+	}
+	if h.states[h.index] == s {
+		return
+	}
+	h.states = append(h.states[:h.index+1], s)
+	if len(h.states) > 100 {
+		h.states = h.states[1:]
+	}
+	h.index = len(h.states) - 1
+}
+
+func (h *trimHistory) restore(redo bool) (trimSelection, bool) {
+	next := h.index - 1
+	if redo {
+		next = h.index + 1
+	}
+	if next < 0 || next >= len(h.states) {
+		return trimSelection{}, false
+	}
+	h.index = next
+	return h.states[next], true
+}

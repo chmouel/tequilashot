@@ -21,6 +21,8 @@ import (
 const pageTrim = "trim"
 
 type trimView struct {
+	history                trimHistory
+	undo, redo             *gtk.Button
 	file, mode, returnPage string
 	info                   MediaInfo
 	video                  *gtk.Video
@@ -83,8 +85,10 @@ func (a *app) buildTrim() *gtk.Box {
 		if t.syncing {
 			return
 		}
+		a.commitTrimEdit()
 		t.selection.remove = !t.keep.Active()
 		a.updateTrim()
+		a.commitTrimEdit()
 	})
 	modes.Append(t.keep)
 	modes.Append(remove)
@@ -121,7 +125,14 @@ func (a *app) buildTrim() *gtk.Box {
 				at = t.selection.end
 			}
 			a.seekTrim(at)
+			if spin.StateFlags()&gtk.StateFlagFocusWithin == 0 {
+				a.commitTrimEdit()
+			}
 		})
+		spin.ConnectActivate(func() { spin.Update(); a.commitTrimEdit() })
+		focus := gtk.NewEventControllerFocus()
+		focus.ConnectLeave(func() { spin.Update(); a.commitTrimEdit() })
+		spin.AddController(focus)
 	}
 	t.controls.Append(times)
 
@@ -168,11 +179,21 @@ func (a *app) buildTrim() *gtk.Box {
 		if t.export != nil {
 			return
 		}
+		a.commitTrimEdit()
 		t.selection.start, t.selection.end = 0, t.selection.duration
 		a.updateTrim()
 		a.seekTrim(0)
+		a.commitTrimEdit()
 	})
 	footer.Append(t.reset)
+	t.undo = gtk.NewButtonWithLabel("Undo")
+	t.undo.SetTooltipText("Undo the last edit (Ctrl+Z)")
+	t.undo.ConnectClicked(func() { a.restoreTrimEdit(false) })
+	footer.Append(t.undo)
+	t.redo = gtk.NewButtonWithLabel("Redo")
+	t.redo.SetTooltipText("Redo the last edit (Ctrl+Shift+Z)")
+	t.redo.ConnectClicked(func() { a.restoreTrimEdit(true) })
+	footer.Append(t.redo)
 	spacer := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	spacer.SetHExpand(true)
 	footer.Append(spacer)
@@ -216,6 +237,7 @@ func (a *app) buildTrimTimeline() *gtk.Overlay {
 	var origin float64
 	var handle int
 	drag.ConnectDragBegin(func(x, _ float64) {
+		a.commitTrimEdit()
 		t.timeline.GrabFocus()
 		origin, handle = x, 0
 		d := float64(t.selection.duration)
@@ -254,7 +276,9 @@ func (a *app) buildTrimTimeline() *gtk.Overlay {
 		}
 		a.seekTrim(at)
 	})
-	drag.ConnectDragEnd(func(_, _ float64) { t.timeline.SetCursorFromName("default") })
+	finishDrag := func() { t.timeline.SetCursorFromName("default"); a.commitTrimEdit() }
+	drag.ConnectDragEnd(func(_, _ float64) { finishDrag() })
+	drag.ConnectCancel(func(_ *gdk.EventSequence) { finishDrag() })
 	t.timeline.AddController(drag)
 	key := gtk.NewEventControllerKey()
 	key.ConnectKeyPressed(func(keyval, _ uint, mods gdk.ModifierType) bool {
@@ -353,6 +377,7 @@ func (a *app) openTrimSource(file string, info MediaInfo, mode, returnPage strin
 	t.seekQueued, t.playOnSeek = false, false
 	t.lastSeek = time.Time{}
 	t.selection = trimSelection{end: info.Duration, duration: info.Duration}
+	t.history.reset(t.selection)
 	t.syncing = true
 	t.start.SetRange(0, t.selection.duration.Seconds())
 	t.end.SetRange(0, t.selection.duration.Seconds())
@@ -410,6 +435,7 @@ func (a *app) updateTrim() {
 		t.caption.SetText(fmt.Sprintf("%s %s–%s · Result %s", verb, trimClock(t.selection.start), trimClock(t.selection.end), trimClock(trimLength(segments))))
 	}
 	t.timeline.QueueDraw()
+	a.syncTrimHistory()
 }
 
 func trimClock(d time.Duration) string {
@@ -597,6 +623,8 @@ func (a *app) saveTrim() {
 	done := make(chan struct{})
 	t.done = done
 	t.controls.SetSensitive(false)
+	t.undo.SetSensitive(false)
+	t.redo.SetSensitive(false)
 	t.video.SetSensitive(false)
 	t.reset.SetSensitive(false)
 	t.save.SetSensitive(false)
@@ -644,4 +672,49 @@ func (a *app) saveTrim() {
 			a.toast("Trimmed copy saved; the original is kept")
 		})
 	}()
+}
+
+func (a *app) commitTrimEdit() {
+	t := &a.trim
+	if t.syncing || t.export != nil || t.selection.duration <= 0 {
+		return
+	}
+	t.history.record(t.selection)
+	a.syncTrimHistory()
+}
+
+func (a *app) syncTrimHistory() {
+	t := &a.trim
+	pending := len(t.history.states) > 0 && t.selection != t.history.states[t.history.index]
+	t.undo.SetSensitive(t.export == nil && (t.history.index > 0 || pending))
+	t.redo.SetSensitive(t.export == nil && !pending && t.history.index+1 < len(t.history.states))
+}
+
+func (a *app) restoreTrimEdit(redo bool) {
+	t := &a.trim
+	if t.export != nil {
+		return
+	}
+	a.commitTrimEdit()
+	s, ok := t.history.restore(redo)
+	if !ok {
+		return
+	}
+	t.selection = s
+	t.syncing = true
+	t.keep.SetActive(!s.remove)
+	t.syncing = false
+	a.updateTrim()
+	a.seekTrim(s.start)
+}
+
+func (a *app) trimHistoryShortcut(key uint, mods gdk.ModifierType) bool {
+	t := &a.trim
+	if a.res.dialogOpen || a.aboutOpen || a.pages.VisibleChildName() != pageTrim || t.export != nil ||
+		mods&gdk.ControlMask == 0 || mods&(gdk.AltMask|gdk.SuperMask) != 0 ||
+		(key != gdk.KEY_z && key != gdk.KEY_Z) || (t.start.StateFlags()|t.end.StateFlags())&gtk.StateFlagFocusWithin != 0 {
+		return false
+	}
+	a.restoreTrimEdit(mods&gdk.ShiftMask != 0)
+	return true
 }

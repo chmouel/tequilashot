@@ -359,7 +359,10 @@ func (a *app) build() {
 
 	key := gtk.NewEventControllerKey()
 	key.SetPropagationPhase(gtk.PhaseCapture)
-	key.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
+	key.ConnectKeyPressed(func(keyval, _ uint, mods gdk.ModifierType) bool {
+		if a.trimHistoryShortcut(keyval, mods) {
+			return true
+		}
 		if a.res.dialogOpen {
 			return false
 		}
