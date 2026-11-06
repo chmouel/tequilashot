@@ -71,7 +71,7 @@ func (a *app) sponsor() {
 
 // primaryMenu builds the header bar's main menu and registers its actions.
 func (a *app) primaryMenu() *gtk.MenuButton {
-	for name, activate := range map[string]func(){"preferences": a.showPreferences, "about": a.showAbout} {
+	for name, activate := range map[string]func(){"open-video": a.chooseTrimVideo, "preferences": a.showPreferences, "about": a.showAbout} {
 		action := gio.NewSimpleAction(name, nil)
 		action.ConnectActivate(func(*glib.Variant) {
 			if !a.modalOpen() {
@@ -81,8 +81,11 @@ func (a *app) primaryMenu() *gtk.MenuButton {
 		a.gtkApp.AddAction(action)
 	}
 	a.gtkApp.SetAccelsForAction("app.preferences", []string{"<Control>comma"})
+	a.gtkApp.SetAccelsForAction("app.open-video", []string{"<Control>o"})
 
 	menu := gio.NewMenu()
+	menu.Append("_Open Video…", "app.open-video")
+	menu.AppendSection("", nil)
 	menu.Append("_Preferences", "app.preferences")
 	menu.Append("_About Tequilashot", "app.about")
 	b := gtk.NewMenuButton()

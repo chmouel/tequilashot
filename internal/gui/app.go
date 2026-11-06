@@ -477,9 +477,6 @@ func (a *app) build() {
 
 	root := gtk.NewBox(gtk.OrientationVertical, 0)
 	header := adw.NewHeaderBar()
-	open := gtk.NewButtonWithLabel("Open video")
-	open.ConnectClicked(a.chooseTrimVideo)
-	header.PackStart(open)
 	a.win.AddController(a.trimDropTarget())
 	header.PackEnd(a.primaryMenu())
 	header.PackEnd(a.headerAction("emote-love-symbolic", "Sponsor Tequilashot", "er-sponsor", a.sponsor))

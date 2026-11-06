@@ -187,7 +187,8 @@ back to the setup page.
   <img src=".github/screenshots/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles" width="60%">
 </p>
 
-Open an existing local video with Open video, or drop one onto the idle window.
+Open an existing local video from Open Video in the main menu
+(<kbd>Ctrl</kbd>+<kbd>O</kbd>), or drop one onto the idle window.
 Recordings and saved replays also offer Trim. Drag the two timeline handles
 to select a section, or enter precise start and end times in seconds.
 
@@ -415,7 +416,8 @@ To check the picture locally, run
 ### Preferences
 
 Open Preferences from the main menu in the dialogue's header bar, or press
-<kbd>Ctrl</kbd>+<kbd>,</kbd>. Switches and choices are saved as you change
+<kbd>Ctrl</kbd>+<kbd>,</kbd>. The same menu opens an existing video for
+trimming and shows the about box. Switches and choices are saved as you change
 them; text fields are saved when you apply them, by pressing
 <kbd>Enter</kbd> or the apply button. Either way the new settings apply from
 the next capture, and a recording or replay already under way keeps the
