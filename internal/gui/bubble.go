@@ -134,7 +134,8 @@ func RunCameraBubble(opts BubbleOptions) error {
 						win.SetVisible(false)
 						fail(err)
 					})
-				})
+				},
+			)
 			onFrame = cut.Put
 		} else {
 			latest := &external.LatestFrame{}
