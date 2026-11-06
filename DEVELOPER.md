@@ -51,7 +51,12 @@ Pushing a `v*` tag starts the release workflow, which runs GoReleaser inside an
 Arch Linux container: it builds a GTK 4 binary for x86_64 and a `nogui` binary
 for x86_64 and aarch64, packs the desktop entry and the icon where the dialogue
 is included, writes release notes grouped by Conventional Commit type, and
-publishes `tequilashot-bin` to the AUR.
+publishes `tequilashot-bin` to the AUR. Once the release is published, the
+workflow rewrites its notes from the commit range with Gemini.
+
+That last step needs a `GEMINI_API_KEY` repository secret. Without it the
+workflow logs a notice and keeps the changelog GoReleaser wrote, so the release
+still succeeds.
 
 ## Daemon socket protocol
 
