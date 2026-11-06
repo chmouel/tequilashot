@@ -126,15 +126,15 @@ func trimHasAudio(ctx context.Context, file string) (bool, error) {
 }
 
 func exportTrim(ctx context.Context, source string, selection trimSelection, progress func(float64)) (string, MediaInfo, error) {
+	if _, err := selection.segments(); err != nil {
+		return "", MediaInfo{}, err
+	}
+	selection, err := snapTrimSelection(ctx, source, selection)
+	if err != nil {
+		return "", MediaInfo{}, err
+	}
 	segments, err := selection.segments()
 	if err != nil {
-		return "", MediaInfo{}, err
-	}
-	selection, err = snapTrimSelection(ctx, source, selection)
-	if err != nil {
-		return "", MediaInfo{}, err
-	}
-	if segments, err = selection.segments(); err != nil {
 		return "", MediaInfo{}, err
 	}
 	audio, err := trimHasAudio(ctx, source)
