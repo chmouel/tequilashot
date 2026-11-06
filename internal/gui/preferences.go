@@ -30,6 +30,9 @@ type prefsDialog struct {
 	persist bool
 	// status is the daemon's view of its environment, nil until it replies.
 	status *protocol.PreferencesStatus
+	// daemonOlder records that the running daemon does not answer for its
+	// preferences, so the window warns instead of claiming they apply.
+	daemonOlder bool
 	// refresh re-renders rows that depend on the save folder or the
 	// environment.
 	refresh []func()
@@ -73,14 +76,26 @@ func (d *prefsDialog) fetchStatus() {
 	}
 	resp, err := d.a.b.Send(protocol.Request{Command: "execute", Action: "preferences-status"})
 	if err != nil || resp == nil || !resp.Success {
+		d.staleDaemon()
 		return
 	}
 	var st protocol.PreferencesStatus
 	if json.Unmarshal([]byte(resp.Message), &st) != nil {
+		d.staleDaemon()
 		return
 	}
 	glib.IdleAdd(func() {
 		d.status = &st
+		d.rerender()
+	})
+}
+
+// staleDaemon records that the running daemon predates the preferences
+// dialogue, so it neither reads nor reports them. The window says so instead
+// of pretending the settings have taken effect there.
+func (d *prefsDialog) staleDaemon() {
+	glib.IdleAdd(func() {
+		d.daemonOlder = true
 		d.rerender()
 	})
 }
@@ -91,16 +106,31 @@ func (d *prefsDialog) rerender() {
 	}
 }
 
-// update applies a change, saves it and makes it current for this process.
+// update applies a change, saves it and only then makes it current for this
+// process, so a write failure can never leave the window and the daemon with
+// different settings.
 func (d *prefsDialog) update(change func(*prefs.Prefs)) {
-	change(&d.p)
+	candidate := d.p.Clone()
+	change(&candidate)
+	if d.persist {
+		if err := prefs.Save(prefs.Path(), candidate); err != nil {
+			d.toast("The preferences could not be saved, so nothing was changed: " + err.Error())
+			d.restore()
+			return
+		}
+	}
+	d.p = candidate
 	prefs.Set(d.p.Clone())
-	if !d.persist {
-		return
-	}
-	if err := prefs.Save(prefs.Path(), d.p); err != nil {
-		d.toast("The preferences could not be saved: " + err.Error())
-	}
+}
+
+// restore reopens the dialogue from the saved preferences after a change that
+// could not be written, so no control shows a value the daemon cannot see.
+func (d *prefsDialog) restore() {
+	glib.IdleAdd(func() {
+		d.a.prefsOpen = false
+		d.dlg.Close()
+		d.a.openPreferences()
+	})
 }
 
 func (d *prefsDialog) toast(msg string) {
@@ -175,6 +205,16 @@ func overriddenBy(env string) string {
 
 func (d *prefsDialog) generalPage() *adw.PreferencesPage {
 	page := newPage("General", "preferences-system-symbolic")
+
+	daemon := newGroup("Daemon", "")
+	stale := adw.NewActionRow()
+	stale.SetTitle("The Running Daemon Is Older Than This Window")
+	stale.SetSubtitle("It does not read these preferences, so captures it starts keep the settings it was given. Restart Tequilashot once no recording or replay is under way to let the new daemon read them.")
+	stale.AddPrefix(gtk.NewImageFromIconName("dialog-warning-symbolic"))
+	stale.SetVisible(false)
+	daemon.Add(stale)
+	page.Add(daemon)
+	d.refresh = append(d.refresh, func() { stale.SetVisible(d.daemonOlder) })
 
 	storage := newGroup("Storage", "")
 	folder := adw.NewActionRow()

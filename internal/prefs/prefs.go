@@ -3,6 +3,7 @@
 package prefs
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,8 +123,10 @@ func Path() string {
 }
 
 // Load reads preferences from path. A missing file yields the defaults and
-// invalid values are replaced by their defaults with a log message; an error
-// is returned only when the file cannot be read or parsed.
+// invalid values are replaced by their defaults with a log message. A file
+// that exists but cannot be read as a preferences object yields the defaults
+// with old-file deletion switched off, so that a damaged file cannot cause
+// deletions the user did not choose.
 func Load(path string) (Prefs, error) {
 	p := Default()
 	data, err := os.ReadFile(path) //nolint:gosec // the user's own preferences file
@@ -131,15 +134,25 @@ func Load(path string) (Prefs, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return p, nil
 		}
-		return p, err
+		return refuse(p), err
+	}
+	if trimmed := bytes.TrimSpace(data); len(trimmed) == 0 || trimmed[0] != '{' {
+		return refuse(p), fmt.Errorf("%s: not a preferences object", path)
 	}
 	if err := json.Unmarshal(data, &p); err != nil {
-		return Default(), fmt.Errorf("%s: %w", path, err)
+		return refuse(p), fmt.Errorf("%s: %w", path, err)
 	}
 	for _, msg := range p.sanitise() {
 		log.Printf("preferences: %s", msg)
 	}
 	return p, nil
+}
+
+// refuse keeps the defaults for harmless settings and switches off the one
+// setting that can delete the user's files.
+func refuse(p Prefs) Prefs {
+	p.CleanupEnabled = false
+	return p
 }
 
 // sanitise resets invalid values to their defaults and describes each reset.
@@ -152,7 +165,13 @@ func (p *Prefs) sanitise() []string {
 			fix()
 		}
 	}
-	check(p.CleanupDays >= MinCleanupDays && p.CleanupDays <= MaxCleanupDays, "cleanup_days", func() { p.CleanupDays = d.CleanupDays })
+	// An unusable period is never shortened to the default: that would delete
+	// files the user meant to keep, so deletion stops until a period is set.
+	if p.CleanupDays < MinCleanupDays || p.CleanupDays > MaxCleanupDays {
+		msgs = append(msgs, "invalid cleanup_days, old files are no longer deleted")
+		p.CleanupDays = d.CleanupDays
+		p.CleanupEnabled = false
+	}
 	check(slices.Contains(FrameRates, p.FrameRate), "frame_rate", func() { p.FrameRate = d.FrameRate })
 	check(slices.Contains(MaxWidths, p.MaxWidth), "max_width", func() { p.MaxWidth = d.MaxWidth })
 	check(slices.Contains(VideoCodecs, p.VideoCodec), "video_codec", func() { p.VideoCodec = "" })
@@ -213,16 +232,15 @@ func Set(p Prefs) {
 }
 
 // Reload reads the preferences file again. A file that cannot be read or
-// parsed keeps the previous preferences in effect and is reported, so that
-// callers can avoid acting on defaults the user may have turned off.
+// parsed is reported and its fail-closed value is published, so callers never
+// act on an administrative default the user may have turned off.
 func Reload() error {
 	p, err := Load(Path())
 	if err != nil {
 		log.Printf("preferences: %v", err)
-		return err
 	}
 	Set(p)
-	return nil
+	return err
 }
 
 // SegmentationModelPath returns the background-removal model file: the

@@ -28,15 +28,23 @@ func TestLoadMissingAndSanitise(t *testing.T) {
 	want := Default()
 	want.MaxWidth = 2560
 	want.ProgramPaths = map[string]string{"slurp": "/opt/slurp"}
+	// An unusable period stops deletion instead of shortening the period.
+	want.CleanupEnabled = false
 	if !reflect.DeepEqual(p, want) {
 		t.Fatalf("sanitised = %+v, want %+v", p, want)
 	}
 
-	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Load(path); err == nil {
-		t.Fatal("expected a parse error")
+	for _, broken := range []string{"{", "null", "[]", ""} {
+		if err := os.WriteFile(path, []byte(broken), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p, err := Load(path)
+		if err == nil {
+			t.Fatalf("%q: expected an error", broken)
+		}
+		if p.CleanupEnabled {
+			t.Fatalf("%q: a damaged file must not enable deletion", broken)
+		}
 	}
 }
 
