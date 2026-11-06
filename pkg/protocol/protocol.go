@@ -33,3 +33,17 @@ type WaybarStatus struct {
 	Class   string `json:"class"`
 	Alt     string `json:"alt"`
 }
+
+// PreferencesStatus is the preferences-status reply, carried as JSON in
+// Response.Message. The *Env fields report environment overrides seen by the daemon.
+type PreferencesStatus struct {
+	SaveDir                  string `json:"save_dir"`
+	LegacySaveDir            string `json:"legacy_save_dir"`
+	SaveDirEnv               bool   `json:"save_dir_env"`
+	AIModelEnv               bool   `json:"ai_model_env"`
+	SegmentationModelEnv     bool   `json:"segmentation_model_env"`
+	SegmentationModel        string `json:"segmentation_model"`
+	SegmentationModelDefault string `json:"segmentation_model_default"`
+	OnnxRuntimeLibEnv        bool   `json:"onnxruntime_lib_env"`
+	CleanupActive            bool   `json:"cleanup_active"`
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/chmouel/tequilashot/internal/commands"
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/prefs"
 	"github.com/chmouel/tequilashot/internal/state"
 	"github.com/chmouel/tequilashot/pkg/protocol"
 )
@@ -143,6 +144,9 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 	ctx := d.ctx
+	if req.Action != "waybar-status" {
+		_ = prefs.Reload()
+	}
 
 	// Extract common options
 	delay := 0
@@ -284,6 +288,9 @@ func (d *Daemon) executeCommand(req protocol.Request) protocol.Response {
 		}
 		err = d.recordingHandler.ToggleRecord(ctx, startAction, delay, useCurrentScreen, cropTop, opts)
 
+	case "preferences-status":
+		return d.preferencesStatus()
+
 	// Waybar status
 	case "waybar-status":
 		// Check if custom icons were provided in the request
@@ -360,10 +367,39 @@ func (d *Daemon) cleanupRoutine() {
 }
 
 func (d *Daemon) cleanup() {
-	log.Println("Running cleanup routine")
-	if err := external.CleanupOldFiles(d.ctx, d.cfg.SaveLocation, d.cfg.CleanupTime); err != nil {
+	if err := prefs.Reload(); err != nil {
+		log.Printf("Clean-up skipped: the preferences could not be read")
+		return
+	}
+	p := prefs.Current()
+	dir := d.cfg.SaveDir()
+	if !p.CleanupActive(dir) {
+		log.Printf("Clean-up of %s is off", dir)
+		return
+	}
+	log.Printf("Removing files older than %d days from %s", p.CleanupDays, dir)
+	if err := external.CleanupOldFiles(d.ctx, dir, time.Duration(p.CleanupDays)*24*time.Hour); err != nil {
 		log.Printf("Cleanup error: %v", err)
 	}
+}
+
+// preferencesStatus reports the settings the daemon resolves from its own
+// environment, which may differ from the dialogue's.
+func (d *Daemon) preferencesStatus() protocol.Response {
+	p := prefs.Current()
+	dir := d.cfg.SaveDir()
+	data, _ := json.Marshal(protocol.PreferencesStatus{
+		SaveDir:                  dir,
+		LegacySaveDir:            prefs.LegacySaveDir(),
+		SaveDirEnv:               os.Getenv(prefs.EnvSaveLocation) != "",
+		AIModelEnv:               os.Getenv(prefs.EnvAIModel) != "",
+		SegmentationModelEnv:     os.Getenv(prefs.EnvSegmentationModel) != "",
+		SegmentationModel:        prefs.SegmentationModelPath(),
+		SegmentationModelDefault: prefs.DefaultSegmentationModelPath(),
+		OnnxRuntimeLibEnv:        os.Getenv(prefs.EnvOnnxRuntimeLib) != "",
+		CleanupActive:            p.CleanupActive(dir),
+	})
+	return protocol.Response{Success: true, Message: string(data), State: d.state.GetState()}
 }
 
 // parseMicDevice reads the optional mic_device request option.

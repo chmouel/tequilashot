@@ -55,10 +55,11 @@ func (h *ScreenshotHandler) Capture(ctx context.Context, delay int, output, geom
 	}
 	sleepWithCountdown(h.state, delay)
 
-	file := h.cfg.GenerateFilename()
+	dir := h.cfg.SaveDir()
+	file := config.GenerateFilename(dir)
 	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec
 	if os.IsExist(err) {
-		f, err = os.CreateTemp(h.cfg.SaveLocation, strings.TrimSuffix(filepath.Base(file), ".png")+"-*.png")
+		f, err = os.CreateTemp(dir, strings.TrimSuffix(filepath.Base(file), ".png")+"-*.png")
 	}
 	if err != nil {
 		return "", err
@@ -208,11 +209,11 @@ func (h *ScreenshotHandler) SelectionFile(ctx context.Context, delay int) error 
 		}
 
 		if action == "edit" {
-			outputFile := filepath.Join(h.cfg.SaveLocation, newname)
+			outputFile := filepath.Join(filepath.Dir(file), newname)
 			return external.Satty(ctx, file, outputFile, true)
 		}
 
-		newPath := filepath.Join(h.cfg.SaveLocation, newname)
+		newPath := filepath.Join(filepath.Dir(file), newname)
 		return os.Rename(file, newPath)
 	}
 
@@ -244,7 +245,7 @@ func (h *ScreenshotHandler) SelectionEdit(ctx context.Context, delay int) error 
 	}
 	defer func() { _ = os.Remove(tmpFile) }()
 
-	outputFile := filepath.Join(h.cfg.SaveLocation, fmt.Sprintf("screenshot-%s.png", time.Now().Format("20060102-15:04:05")))
+	outputFile := filepath.Join(h.cfg.SaveDir(), fmt.Sprintf("screenshot-%s.png", time.Now().Format("20060102-15:04:05")))
 	return external.Satty(ctx, tmpFile, outputFile, true)
 }
 
@@ -287,7 +288,8 @@ func (h *ScreenshotHandler) SelectionClipboard(ctx context.Context, delay int) e
 		return nil
 	}
 
-	defaultName := filepath.Base(h.cfg.GenerateFilename())
+	dir := h.cfg.SaveDir()
+	defaultName := filepath.Base(config.GenerateFilename(dir))
 
 	if action == "saveai" {
 		tmpFile := fmt.Sprintf("/tmp/screenshot-%d.png", time.Now().Unix())
@@ -301,7 +303,7 @@ func (h *ScreenshotHandler) SelectionClipboard(ctx context.Context, delay int) e
 		}
 		defer func() { _ = os.Remove(tmpFile) }()
 
-		aiName, err := external.AIChat(ctx, h.cfg.AIModelImage, tmpFile,
+		aiName, err := external.AIChat(ctx, h.cfg.AIModel(), tmpFile,
 			"identify a filename for that image and return only the slug of the filename, nothing else")
 
 		if err == nil && aiName != "" {
@@ -321,7 +323,7 @@ func (h *ScreenshotHandler) SelectionClipboard(ctx context.Context, delay int) e
 		newname += ".png"
 	}
 
-	outputFile := filepath.Join(h.cfg.SaveLocation, newname)
+	outputFile := filepath.Join(dir, newname)
 
 	if action == "edit" {
 		clipData, err := external.WlPaste(ctx, "image/png")

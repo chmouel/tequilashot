@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 // previewReleaseTimeout bounds how long a stopped preview may take to exit.
@@ -141,7 +143,7 @@ func StartPreview(g *PreviewGate, device string, width, height, fps int, onFrame
 
 // runPreview runs one ffmpeg and returns the number of JPEG frames it emitted.
 func runPreview(ctx context.Context, args []string, onFrame func([]byte)) int {
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, prefs.Bin("ffmpeg"), args...) //nolint:gosec
 	cmd.WaitDelay = time.Second
 	out, err := cmd.StdoutPipe()
 	if err != nil || cmd.Start() != nil {

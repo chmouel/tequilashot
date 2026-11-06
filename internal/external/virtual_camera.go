@@ -10,6 +10,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 // Virtual camera backends and the picture it publishes.
@@ -60,7 +62,7 @@ func ResolveVirtualCameraBackend(backend string) (resolved, device string, err e
 	if !ValidVirtualCameraBackend(backend) {
 		return "", "", fmt.Errorf("unknown virtual camera backend %q, expected auto, v4l2loopback or pipewire", backend)
 	}
-	if _, err := lookPath("wf-recorder"); err != nil {
+	if _, err := lookPath(prefs.Bin("wf-recorder")); err != nil {
 		return "", "", errors.New("the virtual camera needs wf-recorder")
 	}
 	if backend != VirtualCameraPipeWire {
@@ -71,7 +73,7 @@ func ResolveVirtualCameraBackend(backend string) (resolved, device string, err e
 			return "", "", errors.New("no v4l2loopback device found; load the v4l2loopback module first")
 		}
 	}
-	if _, err := lookPath("gst-launch-1.0"); err != nil {
+	if _, err := lookPath(prefs.Bin("gst-launch-1.0")); err != nil {
 		return "", "", errors.New("the PipeWire virtual camera needs gst-launch-1.0 with the PipeWire plugin")
 	}
 	return VirtualCameraPipeWire, "", nil
@@ -139,7 +141,7 @@ func StartVirtualCamera(spec VirtualCameraSpec) (*VirtualCamera, error) {
 	}
 
 	v := &VirtualCamera{done: make(chan struct{}), stderr: &tail{max: 2048}}
-	v.recorder = exec.Command("wf-recorder", wfRecorderArgs(spec)...) //nolint:gosec // arguments are built above
+	v.recorder = exec.Command(prefs.Bin("wf-recorder"), wfRecorderArgs(spec)...) //nolint:gosec // arguments are built above
 	v.recorder.Stderr = v.stderr
 	v.recorder.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGINT}
 
@@ -150,7 +152,7 @@ func StartVirtualCamera(spec VirtualCameraSpec) (*VirtualCamera, error) {
 			return nil, err
 		}
 		v.recorder.Stdout = pipeW
-		v.sink = exec.Command("gst-launch-1.0", gstArgs()...) //nolint:gosec // fixed arguments
+		v.sink = exec.Command(prefs.Bin("gst-launch-1.0"), gstArgs()...) //nolint:gosec // fixed arguments
 		v.sink.Stdin = pipeR
 		v.sink.Stderr = v.stderr
 		v.sink.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGTERM}

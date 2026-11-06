@@ -22,7 +22,7 @@ type trimImport struct {
 }
 
 func (a *app) trimImportBlocked() bool {
-	return a.closing || a.busy || a.replayBusy || a.replayActive || a.trim.export != nil || a.res.editing || a.res.dialogOpen || a.aboutOpen
+	return a.closing || a.busy || a.replayBusy || a.replayActive || a.trim.export != nil || a.res.editing || a.res.dialogOpen || a.modalOpen()
 }
 
 func (a *app) chooseTrimVideo() {

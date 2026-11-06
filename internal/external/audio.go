@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 // AudioDevice is a capture device reported by gpu-screen-recorder.
@@ -32,7 +34,7 @@ func ValidateMicDevice(id string) error {
 
 // ListMicrophones returns the input devices gpu-screen-recorder can capture.
 func ListMicrophones(ctx context.Context) ([]AudioDevice, error) {
-	out, err := exec.CommandContext(ctx, "gpu-screen-recorder", "--list-audio-devices").Output() //nolint:gosec
+	out, err := exec.CommandContext(ctx, prefs.Bin("gpu-screen-recorder"), "--list-audio-devices").Output() //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("listing audio devices: %w", err)
 	}

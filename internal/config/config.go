@@ -2,18 +2,24 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 const notificationIcon = "com.chmouel.Tequilashot.Recorder"
 
 // Config holds all configuration for tequilashot.
 type Config struct {
-	SaveLocation       string
-	CacheFile          string
-	CleanupTime        time.Duration
+	// SaveLocation pins the save folder; when empty it follows the
+	// environment and the preferences on every capture.
+	SaveLocation string
+	CacheFile    string
+	// AIModelImage pins the naming model; when empty it follows the
+	// environment and the preferences.
 	AIModelImage       string
 	ScreenshotIcon     string
 	RecordingStartIcon string
@@ -33,10 +39,7 @@ func Load() (*Config, error) {
 	uid := os.Getuid()
 
 	cfg := &Config{
-		SaveLocation:       getEnv("TEQUILASHOT_SAVE_LOCATION", filepath.Join(homeDir, "Downloads", "Screenshots")),
 		CacheFile:          filepath.Join(homeDir, ".cache", ".tequilashot-recording"),
-		CleanupTime:        3 * 24 * time.Hour, // 3 days
-		AIModelImage:       getEnv("TEQUILASHOT_AI_MODEL", "gemini:gemini-2.5-flash-image"),
 		ScreenshotIcon:     notificationIcon,
 		RecordingStartIcon: notificationIcon,
 		RecordingStopIcon:  notificationIcon,
@@ -45,29 +48,47 @@ func Load() (*Config, error) {
 		WaybarPollInterval: getPollInterval(),
 	}
 
-	// Ensure save location exists
-	if err := os.MkdirAll(cfg.SaveLocation, 0o750); err != nil {
+	_ = prefs.Reload()
+	if err := os.MkdirAll(cfg.SaveDir(), 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create save location: %w", err)
 	}
 
 	return cfg, nil
 }
 
+// SaveDir returns the folder for new captures, creating it when missing.
+func (c *Config) SaveDir() string {
+	dir := c.SaveLocation
+	if dir == "" {
+		dir = prefs.Current().SaveDir()
+	}
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		log.Printf("failed to create save location %s: %v", dir, err)
+	}
+	return dir
+}
+
+// AIModel returns the aichat model used to name screenshots.
+func (c *Config) AIModel() string {
+	if c.AIModelImage != "" {
+		return c.AIModelImage
+	}
+	return prefs.Current().AIModelName()
+}
+
+// GenerateFilename generates a unique filename for a screenshot in dir.
+func GenerateFilename(dir string) string {
+	return filepath.Join(dir, fmt.Sprintf("Screenshot_%s.png", time.Now().Format("2006-01-02-15:04.05")))
+}
+
 // GenerateFilename generates a unique filename for a screenshot.
 func (c *Config) GenerateFilename() string {
-	return filepath.Join(c.SaveLocation, fmt.Sprintf("Screenshot_%s.png", time.Now().Format("2006-01-02-15:04.05")))
+	return GenerateFilename(c.SaveDir())
 }
 
 // GenerateRecordingBase generates a base filename for a recording.
 func (c *Config) GenerateRecordingBase() string {
-	return filepath.Join(c.SaveLocation, fmt.Sprintf("recording-%s", time.Now().Format("20060102-15h04")))
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+	return filepath.Join(c.SaveDir(), fmt.Sprintf("recording-%s", time.Now().Format("20060102-15h04")))
 }
 
 func getPollInterval() time.Duration {

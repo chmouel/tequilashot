@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 // Camera overlay positions and sizes accepted by CameraOverlay.
@@ -248,7 +250,7 @@ func rate(m *CameraMode) int {
 // ListCameraModes returns every capture mode gpu-screen-recorder reports for
 // webcams, leaving out v4l2loopback devices such as the virtual camera.
 func ListCameraModes(ctx context.Context) ([]CameraMode, error) {
-	out, err := exec.CommandContext(ctx, "gpu-screen-recorder", "--list-v4l2-devices").Output() //nolint:gosec
+	out, err := exec.CommandContext(ctx, prefs.Bin("gpu-screen-recorder"), "--list-v4l2-devices").Output() //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("failed to list cameras: %w", err)
 	}

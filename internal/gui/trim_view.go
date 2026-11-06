@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/chmouel/tequilashot/internal/prefs"
+
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/cairo"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
@@ -774,7 +776,7 @@ func (a *app) loadTrimThumbnails(ctx context.Context) {
 		defer cancel()
 		for i := range 8 {
 			at := duration * time.Duration(2*i+1) / 16
-			data, err := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-ss", trimSeconds(at), //nolint:gosec
+			data, err := exec.CommandContext(ctx, prefs.Bin("ffmpeg"), "-v", "error", "-nostdin", "-ss", trimSeconds(at), //nolint:gosec
 				"-i", file, "-frames:v", "1", "-vf", "scale=120:-2", "-f", "image2pipe", "-c:v", "mjpeg", "-").Output()
 			if ctx.Err() != nil {
 				return
@@ -961,7 +963,7 @@ func (a *app) restoreTrimEdit(redo bool) {
 
 func (a *app) trimHistoryShortcut(key uint, mods gdk.ModifierType) bool {
 	t := &a.trim
-	if a.res.dialogOpen || a.aboutOpen || a.pages.VisibleChildName() != pageTrim || t.export != nil ||
+	if a.res.dialogOpen || a.modalOpen() || a.pages.VisibleChildName() != pageTrim || t.export != nil ||
 		mods&gdk.ControlMask == 0 || mods&(gdk.AltMask|gdk.SuperMask) != 0 ||
 		(key != gdk.KEY_z && key != gdk.KEY_Z) || (t.start.StateFlags()|t.end.StateFlags())&gtk.StateFlagFocusWithin != 0 {
 		return false

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -460,12 +461,16 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 	}
 	pid := h.state.GetRecordingPID()
 	if pid == 0 {
-		if _, err := os.Stat(h.cfg.CacheFile); err != nil {
+		base, err := os.ReadFile(h.cfg.CacheFile)
+		if err != nil {
 			h.mu.Unlock()
 			return fmt.Errorf("no recording in progress")
 		}
-		// The daemon may have restarted since the recording began.
-		out, err := exec.CommandContext(ctx, "pgrep", "-n", "-f", "^gpu-screen-recorder ").Output() //nolint:gosec
+		// The daemon may have restarted since the recording began. Find the
+		// recorder by its output file, which holds whatever program path the
+		// preferences named at the time.
+		pattern := " -o " + regexp.QuoteMeta(string(base)+".mp4") + "( |$)"
+		out, err := exec.CommandContext(ctx, "pgrep", "-n", "-f", pattern).Output() //nolint:gosec
 		if err != nil {
 			h.mu.Unlock()
 			return fmt.Errorf("no recording in progress")

@@ -9,11 +9,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 func TestReplayArgs(t *testing.T) {
 	audio := AudioSources{Desktop: true, Mic: true, MicDevice: "alsa_input.desk"}
-	args, err := replayArgs("DP-1", "/clips", "/run/replay.sock", 60, 2560, 1440, audio)
+	args, err := replayArgs(prefs.Default(), "DP-1", "/clips", "/run/replay.sock", 60, 2560, 1440, audio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,12 +32,12 @@ func TestReplayArgs(t *testing.T) {
 		t.Fatalf("arguments = %v, want %v", got, want)
 	}
 	for _, seconds := range []int{0, 29, 31, 121} {
-		if _, err := replayArgs("DP-1", "/clips", "/run/replay.sock", seconds, 0, 0, AudioSources{}); err == nil {
+		if _, err := replayArgs(prefs.Default(), "DP-1", "/clips", "/run/replay.sock", seconds, 0, 0, AudioSources{}); err == nil {
 			t.Errorf("accepted duration %d", seconds)
 		}
 	}
 	for _, seconds := range []int{30, 60, 120} {
-		if _, err := replayArgs("DP-1", "/clips", "/run/replay.sock", seconds, 0, 0, AudioSources{}); err != nil {
+		if _, err := replayArgs(prefs.Default(), "DP-1", "/clips", "/run/replay.sock", seconds, 0, 0, AudioSources{}); err != nil {
 			t.Errorf("duration %d: %v", seconds, err)
 		}
 	}
