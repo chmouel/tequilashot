@@ -130,3 +130,25 @@ func TestReloadKeepsPreviousOnMalformedFile(t *testing.T) {
 	}
 	Set(Default())
 }
+
+func TestLoadNullCleanupValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "preferences.json")
+	legacy := filepath.Join(t.TempDir(), "Screenshots")
+	for _, body := range []string{
+		`{"cleanup_enabled": true, "cleanup_days": null}`,
+		`{"cleanup_enabled": null, "cleanup_days": 7}`,
+		`{"cleanup_enabled": true, "cleanup_days": 7, "cleanup_folder": null}`,
+		`{"cleanup_enabled": true, "cleanup_days": 7, "save_location_changed": null}`,
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p, err := Load(path)
+		if err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		if p.CleanupActiveWith(legacy, legacy) {
+			t.Fatalf("%s: a null clean-up setting must not leave deletion on", body)
+		}
+	}
+}

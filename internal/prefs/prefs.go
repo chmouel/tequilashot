@@ -142,10 +142,30 @@ func Load(path string) (Prefs, error) {
 	if err := json.Unmarshal(data, &p); err != nil {
 		return refuse(p), fmt.Errorf("%s: %w", path, err)
 	}
+	if nullCleanupSetting(data) {
+		log.Printf("preferences: %s: a clean-up setting is null, old files are no longer deleted", path)
+		p.CleanupEnabled = false
+	}
 	for _, msg := range p.sanitise() {
 		log.Printf("preferences: %s", msg)
 	}
 	return p, nil
+}
+
+// nullCleanupSetting reports whether the file names a clean-up setting with an
+// explicit null. Unmarshalling leaves the default in place for those, which
+// would quietly restore the deletion the user cleared.
+func nullCleanupSetting(data []byte) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return true
+	}
+	for _, key := range []string{"cleanup_enabled", "cleanup_days", "cleanup_folder", "save_location_changed"} {
+		if raw, ok := fields[key]; ok && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return true
+		}
+	}
+	return false
 }
 
 // refuse keeps the defaults for harmless settings and switches off the one

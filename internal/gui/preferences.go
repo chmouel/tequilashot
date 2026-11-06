@@ -30,9 +30,9 @@ type prefsDialog struct {
 	persist bool
 	// status is the daemon's view of its environment, nil until it replies.
 	status *protocol.PreferencesStatus
-	// daemonOlder records that the running daemon does not answer for its
-	// preferences, so the window warns instead of claiming they apply.
-	daemonOlder bool
+	// daemonWarning names why the daemon's settings could not be used, empty
+	// once it answers; the window warns instead of claiming they apply.
+	daemonWarning [2]string
 	// refresh re-renders rows that depend on the save folder or the
 	// environment.
 	refresh []func()
@@ -75,13 +75,24 @@ func (d *prefsDialog) fetchStatus() {
 		return
 	}
 	resp, err := d.a.b.Send(protocol.Request{Command: "execute", Action: "preferences-status"})
-	if err != nil || resp == nil || !resp.Success {
-		d.staleDaemon()
+	if err != nil || resp == nil {
+		d.warnDaemon("The Daemon Could Not Be Asked",
+			"Its settings could not be read, so the marks in this window may not match it. Check that the daemon is running, by taking a capture, and open this window again.")
+		return
+	}
+	if !resp.Success {
+		if strings.Contains(resp.Message, "Unknown action") {
+			d.warnDaemon("The Running Daemon Is Older Than This Window",
+				"It does not read these preferences, so a capture it starts keeps the settings it was already given. Restart the daemon, once no recording or replay is under way, then open this window again.")
+			return
+		}
+		d.warnDaemon("The Daemon Refused the Query", resp.Message)
 		return
 	}
 	var st protocol.PreferencesStatus
 	if json.Unmarshal([]byte(resp.Message), &st) != nil {
-		d.staleDaemon()
+		d.warnDaemon("The Daemon Gave an Answer This Window Does Not Understand",
+			"Its settings are probably too old or too new for this window. Restart the daemon once no recording or replay is under way.")
 		return
 	}
 	glib.IdleAdd(func() {
@@ -90,12 +101,11 @@ func (d *prefsDialog) fetchStatus() {
 	})
 }
 
-// staleDaemon records that the running daemon predates the preferences
-// dialogue, so it neither reads nor reports them. The window says so instead
-// of pretending the settings have taken effect there.
-func (d *prefsDialog) staleDaemon() {
+// warnDaemon records why the daemon's settings could not be used, so the
+// window says so instead of pretending they have taken effect there.
+func (d *prefsDialog) warnDaemon(title, body string) {
 	glib.IdleAdd(func() {
-		d.daemonOlder = true
+		d.daemonWarning = [2]string{title, body}
 		d.rerender()
 	})
 }
@@ -108,28 +118,31 @@ func (d *prefsDialog) rerender() {
 
 // update applies a change, saves it and only then makes it current for this
 // process, so a write failure can never leave the window and the daemon with
-// different settings.
-func (d *prefsDialog) update(change func(*prefs.Prefs)) {
+// different settings. It reports whether the change was kept.
+func (d *prefsDialog) update(change func(*prefs.Prefs)) bool {
 	candidate := d.p.Clone()
 	change(&candidate)
 	if d.persist {
 		if err := prefs.Save(prefs.Path(), candidate); err != nil {
-			d.toast("The preferences could not be saved, so nothing was changed: " + err.Error())
-			d.restore()
-			return
+			d.restore("The preferences could not be saved, so nothing was changed: " + err.Error())
+			return false
 		}
 	}
 	d.p = candidate
 	prefs.Set(d.p.Clone())
+	return true
 }
 
 // restore reopens the dialogue from the saved preferences after a change that
-// could not be written, so no control shows a value the daemon cannot see.
-func (d *prefsDialog) restore() {
+// could not be written, so no control shows a value the daemon cannot see, and
+// carries the reason across to the dialogue that replaces this one.
+func (d *prefsDialog) restore(msg string) {
 	glib.IdleAdd(func() {
 		d.a.prefsOpen = false
 		d.dlg.Close()
-		d.a.openPreferences()
+		if next := d.a.openPreferences(); next != nil {
+			next.toast(msg)
+		}
 	})
 }
 
@@ -208,13 +221,21 @@ func (d *prefsDialog) generalPage() *adw.PreferencesPage {
 
 	daemon := newGroup("Daemon", "")
 	stale := adw.NewActionRow()
-	stale.SetTitle("The Running Daemon Is Older Than This Window")
-	stale.SetSubtitle("It does not read these preferences, so captures it starts keep the settings it was given. Restart Tequilashot once no recording or replay is under way to let the new daemon read them.")
+	stale.SetTitle("The Daemon Could Not Be Asked")
+	stale.SetSubtitle("Its settings could not be read, so the marks in this window may not match it.")
 	stale.AddPrefix(gtk.NewImageFromIconName("dialog-warning-symbolic"))
 	stale.SetVisible(false)
 	daemon.Add(stale)
 	page.Add(daemon)
-	d.refresh = append(d.refresh, func() { stale.SetVisible(d.daemonOlder) })
+	d.refresh = append(d.refresh, func() {
+		if d.daemonWarning[0] == "" {
+			stale.SetVisible(false)
+			return
+		}
+		stale.SetTitle(d.daemonWarning[0])
+		stale.SetSubtitle(d.daemonWarning[1])
+		stale.SetVisible(true)
+	})
 
 	storage := newGroup("Storage", "")
 	folder := adw.NewActionRow()
@@ -484,10 +505,12 @@ func (d *prefsDialog) confirmReset() {
 		if response != "reset" {
 			return
 		}
-		d.update(func(p *prefs.Prefs) {
+		if !d.update(func(p *prefs.Prefs) {
 			*p = prefs.Default()
 			p.SaveLocationChanged = true
-		})
+		}) {
+			return
+		}
 		d.dlg.ForceClose()
 		glib.IdleAdd(func() {
 			d.a.showPreferences()
