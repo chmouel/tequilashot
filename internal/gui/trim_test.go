@@ -359,6 +359,21 @@ func TestExportTrimDelayedPicture(t *testing.T) {
 	if math.Abs((audio - video).Seconds()) > 0.02 {
 		t.Fatalf("cut video lasts %s but its audio lasts %s; the retained prefix lost its sync", video, audio)
 	}
+
+	// Removing everything the picture covers leaves only the tail, as the
+	// retained beginning holds no frame at all.
+	path, _, err = exportTrim(ctx, source, trimSelection{100 * time.Millisecond, 2 * time.Second, 4 * time.Second, true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	durations = trimStreamDurations(t, path)
+	video, audio = durations["video"], durations["audio"]
+	if math.Abs((video - 2*time.Second).Seconds()) > 0.03 {
+		t.Fatalf("tail video lasts %s; expected 2s with no frameless prefix", video)
+	}
+	if math.Abs((audio - video).Seconds()) > 0.02 {
+		t.Fatalf("tail video lasts %s but its audio lasts %s", video, audio)
+	}
 }
 
 func TestExportTrimCollapsedToFrame(t *testing.T) {
