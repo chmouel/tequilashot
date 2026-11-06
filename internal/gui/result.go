@@ -21,6 +21,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
+	"github.com/godbus/dbus/v5"
 )
 
 const (
@@ -266,22 +267,57 @@ func (a *app) playResult() {
 	detach("xdg-open", a.res.file)
 }
 
+const (
+	fileManagerService    = "org.freedesktop.FileManager1"
+	fileManagerObjectPath = dbus.ObjectPath("/org/freedesktop/FileManager1")
+)
+
 func (a *app) showResultFolder() {
 	file := a.res.file
 	uri := gio.NewFileForPath(file).URI()
 	go func() {
-		if !strings.Contains(uri, "'") {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			err := exec.CommandContext(ctx, "gdbus", "call", "--session", //nolint:gosec
-				"--dest", "org.freedesktop.FileManager1", "--object-path", "/org/freedesktop/FileManager1",
-				"--method", "org.freedesktop.FileManager1.ShowItems", "['"+uri+"']", "").Run()
-			if err == nil {
-				return
-			}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if showItems(ctx, uri) == nil {
+			return
 		}
 		detach("xdg-open", filepath.Dir(file))
 	}()
+}
+
+// showItems asks the desktop file manager to select a result file.
+func showItems(ctx context.Context, uri string) error {
+	conn, err := connectSessionBus(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	return conn.Object(fileManagerService, fileManagerObjectPath).
+		CallWithContext(ctx, fileManagerService+".ShowItems", 0, []string{uri}, "").Err
+}
+
+func connectSessionBus(ctx context.Context) (*dbus.Conn, error) {
+	type result struct {
+		conn *dbus.Conn
+		err  error
+	}
+	ready := make(chan result)
+	go func() {
+		conn, err := dbus.ConnectSessionBus(dbus.WithContext(ctx))
+		select {
+		case ready <- result{conn: conn, err: err}:
+		case <-ctx.Done():
+			if conn != nil {
+				_ = conn.Close()
+			}
+		}
+	}()
+	select {
+	case result := <-ready:
+		return result.conn, result.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // detach starts a helper without waiting for it, reaping it in the background.

@@ -52,7 +52,7 @@ var (
 )
 
 // Programs lists the helpers whose location may be configured. Compositor
-// and system tools (swaymsg, hyprctl, pactl, pgrep, gdbus, xdg-open) are
+// and system tools (swaymsg, hyprctl, pactl, xdg-open) are
 // always taken from PATH.
 var Programs = []string{
 	"gpu-screen-recorder", "grim", "slurp", "wf-recorder", "gst-launch-1.0",

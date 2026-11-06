@@ -7,9 +7,7 @@ import (
 	"image"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -498,15 +496,13 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 		// The daemon may have restarted since the recording began. Find the
 		// recorder by its output file, which holds whatever program path the
 		// preferences named at the time.
-		pattern := " -o " + regexp.QuoteMeta(string(base)+".mp4") + "( |$)"
-		out, err := exec.CommandContext(ctx, "pgrep", "-n", "-f", pattern).Output() //nolint:gosec
+		pid, err = findRecorderPID(ctx, "/proc", string(base)+".mp4")
 		if err != nil {
 			h.mu.Unlock()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("no recording in progress")
-		}
-		if _, err := fmt.Sscanf(string(out), "%d", &pid); err != nil {
-			h.mu.Unlock()
-			return fmt.Errorf("failed to parse recorder PID: %w", err)
 		}
 	}
 
