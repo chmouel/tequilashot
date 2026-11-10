@@ -50,7 +50,7 @@ func TestStartRecordingEarlyFailure(t *testing.T) {
 	stubRecorder(t, "touch \"$out\"\necho 'camera busy' >&2\nexit 1\n")
 	h, st := newTestHandler(t)
 
-	err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{})
+	err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}, false)
 	if err == nil || !strings.Contains(err.Error(), "camera busy") {
 		t.Fatalf("expected a camera busy error, got %v", err)
 	}
@@ -69,7 +69,7 @@ func TestStartRecordingSucceedsWhenRecorderStays(t *testing.T) {
 	stubRecorder(t, "exec sleep 30\n")
 	h, st := newTestHandler(t)
 
-	if err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}); err != nil {
+	if err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}, false); err != nil {
 		t.Fatal(err)
 	}
 	pid := st.GetRecordingPID()
@@ -133,7 +133,7 @@ func TestStopDuringStartupThenRestartKeepsNewRecording(t *testing.T) {
 
 	first := make(chan error, 1)
 	go func() {
-		first <- h.startRecording(WithQuietFinish(context.Background()), "", "DP-1", RecordOptions{})
+		first <- h.startRecording(WithQuietFinish(context.Background()), "", "DP-1", RecordOptions{}, false)
 	}()
 	waitForRecordingPID(t, st)
 	time.Sleep(200 * time.Millisecond)
@@ -141,7 +141,7 @@ func TestStopDuringStartupThenRestartKeepsNewRecording(t *testing.T) {
 	if err := h.StopRecording(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}); err != nil {
+	if err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}, false); err != nil {
 		t.Fatal(err)
 	}
 	pid := st.GetRecordingPID()
@@ -159,11 +159,11 @@ func TestEarlyFailureDoesNotDisturbNewerRecording(t *testing.T) {
 
 	first := make(chan error, 1)
 	go func() {
-		first <- h.startRecording(context.Background(), "", "DP-1", RecordOptions{})
+		first <- h.startRecording(context.Background(), "", "DP-1", RecordOptions{}, false)
 	}()
 	waitForRecordingPID(t, st)
 
-	if err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}); err != nil {
+	if err := h.startRecording(context.Background(), "", "DP-1", RecordOptions{}, false); err != nil {
 		t.Fatal(err)
 	}
 	pid := st.GetRecordingPID()
@@ -183,7 +183,7 @@ func TestStartRecordingContextCancelled(t *testing.T) {
 		cancel()
 	}()
 
-	if err := h.startRecording(ctx, "", "DP-1", RecordOptions{}); !errors.Is(err, context.Canceled) {
+	if err := h.startRecording(ctx, "", "DP-1", RecordOptions{}, false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v, want context.Canceled", err)
 	}
 	if st.GetState().Recording {
@@ -260,7 +260,7 @@ func TestRoundCameraBubbleFollowsRecorder(t *testing.T) {
 	})
 
 	opts := RecordOptions{Camera: external.CameraOverlay{Device: "/dev/video0", Shape: external.CameraCircle}}
-	if err := h.startRecording(ctx, "", "DP-1", opts); !errors.Is(err, context.Canceled) {
+	if err := h.startRecording(ctx, "", "DP-1", opts, false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v, want context.Canceled", err)
 	}
 	if placed != [3]int{1600 + 1343, 648, 225} {
@@ -289,7 +289,7 @@ func TestRoundCameraFailureStopsBeforeRecording(t *testing.T) {
 	})
 
 	opts := RecordOptions{Camera: external.CameraOverlay{Device: "/dev/video0", Shape: external.CameraCircle}}
-	if err := h.startRecording(context.Background(), "10,20 800x600", "", opts); err == nil || !strings.Contains(err.Error(), "could not be opened") {
+	if err := h.startRecording(context.Background(), "10,20 800x600", "", opts, false); err == nil || !strings.Contains(err.Error(), "could not be opened") {
 		t.Fatalf("got %v", err)
 	}
 	if st.GetState().Recording {

@@ -433,7 +433,8 @@ them; text fields are saved when you apply them, by pressing
 the next capture, and a recording or replay already under way keeps the
 settings it started with.
 
-- General: the save folder, and whether old files in it are deleted.
+- General: the save folder, whether old files in it are deleted, and whether
+  Waybar is hidden whilst a whole screen is captured.
 - Recording: frame rate, maximum width, quality, codec and mouse pointer for
   recordings, and the instant replay bitrate.
 - Screenshots: the mouse pointer, the region selection colour and the aichat
@@ -498,6 +499,13 @@ fix its `ExecStart` path.
 
 While the virtual camera is live, the status uses the `live` class and the
 icon set by `--icon-live`.
+
+Tequilashot can also keep the bar out of its captures. Switch on Hide Waybar
+on the General preferences page and the bar is hidden whilst a whole
+screen is captured, recorded or offered as a virtual camera, then brought back
+when the capture ends. Selections and window captures leave the bar alone.
+Nothing is done when no Waybar process is found, and the bar is toggled with
+`SIGUSR1`, so leave it visible before starting a capture.
 
 For replay controls, use a separate module with click to save and right-click
 to stop. Start buffering from the dialogue or a key binding first:

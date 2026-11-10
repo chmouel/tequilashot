@@ -61,6 +61,7 @@ type VirtualCameraHandler struct {
 type virtualSession struct {
 	cam    liveCamera
 	bubble stopper
+	hider  statusBarHider
 	once   sync.Once
 }
 
@@ -106,15 +107,17 @@ func (h *VirtualCameraHandler) Start(ctx context.Context, opts VirtualCameraOpti
 	if err != nil {
 		return err
 	}
+	hider := holdStatusBar(output != "")
 	cam, err := startVirtualCamera(external.VirtualCameraSpec{Geometry: geometry, Output: output, Backend: backend, Device: device})
 	if err != nil {
+		hider.Restore()
 		if bubble != nil {
 			bubble.Stop()
 		}
 		return err
 	}
 
-	sess := &virtualSession{cam: cam, bubble: bubble}
+	sess := &virtualSession{cam: cam, bubble: bubble, hider: hider}
 	h.mu.Lock()
 	h.current = sess
 	h.state.SetVirtualCamera(true)
@@ -175,6 +178,7 @@ func (h *VirtualCameraHandler) finish(sess *virtualSession) {
 		if sess.bubble != nil {
 			sess.bubble.Stop()
 		}
+		sess.hider.Restore()
 		h.mu.Lock()
 		if h.current == sess {
 			h.current = nil

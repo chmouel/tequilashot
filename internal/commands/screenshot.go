@@ -70,6 +70,8 @@ func (h *ScreenshotHandler) Capture(ctx context.Context, delay int, output, geom
 		_ = os.Remove(file)
 		return "", err
 	}
+	hider := holdStatusBar(output != "")
+	defer hider.Restore()
 	if _, err := external.Grim(ctx, geometry, output, file); err != nil {
 		_ = os.Remove(file)
 		return "", fmt.Errorf("failed to capture screenshot: %w", err)
@@ -144,6 +146,9 @@ func (h *ScreenshotHandler) CurrentScreenClipboard(ctx context.Context, delay in
 	}
 
 	sleepWithCountdown(h.state, delay)
+
+	hider := holdStatusBar(true)
+	defer hider.Restore()
 
 	data, err := external.Grim(ctx, "", output, "")
 	if err != nil {

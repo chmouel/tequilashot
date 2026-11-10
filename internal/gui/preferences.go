@@ -295,6 +295,12 @@ func (d *prefsDialog) generalPage() *adw.PreferencesPage {
 		d.syncingCleanup = false
 	})
 	page.Add(cleanup)
+
+	statusBar := newGroup("Status Bar", "")
+	statusBar.Add(switchRow("Hide Waybar", "Hides Waybar whilst a whole screen is captured, recorded or shared as a virtual camera", d.p.HideWaybar, func(on bool) {
+		d.update(func(p *prefs.Prefs) { p.HideWaybar = on })
+	}))
+	page.Add(statusBar)
 	return page
 }
 

@@ -85,7 +85,10 @@ type Prefs struct {
 
 	ScreenshotCursor bool   `json:"screenshot_cursor"`
 	SelectionColour  string `json:"selection_colour,omitempty"`
-	AIModel          string `json:"ai_model,omitempty"`
+	// HideWaybar hides Waybar whilst a screen is captured, when Waybar is
+	// detected.
+	HideWaybar bool   `json:"hide_waybar,omitempty"`
+	AIModel    string `json:"ai_model,omitempty"`
 
 	ProgramPaths map[string]string `json:"programs,omitempty"`
 

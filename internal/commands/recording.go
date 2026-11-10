@@ -39,6 +39,7 @@ type recordSession struct {
 	base     string
 	pid      int
 	bubble   stopper
+	hider    statusBarHider
 	stopping atomic.Bool
 }
 
@@ -180,7 +181,7 @@ func (h *RecordingHandler) MovieSelection(ctx context.Context, delay int, opts R
 
 	sleepWithCountdown(h.state, delay)
 
-	return h.startRecording(ctx, geom, "", opts)
+	return h.startRecording(ctx, geom, "", opts, false)
 }
 
 // MovieScreen records a video of the screen (or current screen if useCurrentScreen is true).
@@ -233,10 +234,10 @@ func (h *RecordingHandler) MovieOutput(ctx context.Context, delay int, output st
 			return fmt.Errorf("failed to parse output geometry: %w", err)
 		}
 		croppedGeom := fmt.Sprintf("%d,%d %dx%d", x, y+cropTop, w, ht-cropTop)
-		return h.startRecording(ctx, croppedGeom, "", opts)
+		return h.startRecording(ctx, croppedGeom, "", opts, true)
 	}
 
-	return h.startRecording(ctx, "", output, opts)
+	return h.startRecording(ctx, "", output, opts, true)
 }
 
 // MovieGeometry records a video of an explicit "X,Y WxH" area.
@@ -263,7 +264,7 @@ func (h *RecordingHandler) MovieGeometry(ctx context.Context, delay int, geometr
 
 	sleepWithCountdown(h.state, delay)
 
-	return h.startRecording(ctx, geometry, "", opts)
+	return h.startRecording(ctx, geometry, "", opts, false)
 }
 
 // MovieCurrentWindow records a video of the currently focused window.
@@ -290,7 +291,7 @@ func (h *RecordingHandler) MovieCurrentWindow(ctx context.Context, delay int, op
 
 	sleepWithCountdown(h.state, delay)
 
-	return h.startRecording(ctx, geom, "", opts)
+	return h.startRecording(ctx, geom, "", opts, false)
 }
 
 // earlyExitWindow is how long a new recorder must stay alive to count as started.
@@ -334,15 +335,17 @@ func showBubble(ctx context.Context, geometry, output string, camera external.Ca
 	return startBubble(camera, x+int(math.Round(bx)), y+int(math.Round(by)), int(math.Round(d)), image.Rect(x, y, x+w, y+h))
 }
 
-func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, opts RecordOptions) error {
+func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output string, opts RecordOptions, hideBar bool) error {
 	h.mu.Lock()
 	replaying := h.replay != nil
 	h.mu.Unlock()
 	if replaying {
 		return fmt.Errorf("please stop replay buffering before recording")
 	}
+	hider := holdStatusBar(hideBar)
 	bubble, err := showBubble(ctx, geometry, output, opts.Camera)
 	if err != nil {
+		hider.Restore()
 		return err
 	}
 	stopBubble := func() {
@@ -361,10 +364,11 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	if err := os.WriteFile(h.cfg.CacheFile, []byte(base), 0o600); err != nil {
 		h.mu.Unlock()
 		stopBubble()
+		hider.Restore()
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
-	sess := &recordSession{base: base, bubble: bubble}
+	sess := &recordSession{base: base, bubble: bubble, hider: hider}
 	prev := h.current
 	h.current = sess
 	stderr := &tailBuffer{max: 4096}
@@ -375,6 +379,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 		h.current = prev
 		h.mu.Unlock()
 		stopBubble()
+		hider.Restore()
 		return fmt.Errorf("failed to start recording: %w", err)
 	}
 	sess.pid = cmd.Process.Pid
@@ -389,6 +394,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	exited := make(chan error, 1)
 	go func() {
 		err := cmd.Wait()
+		sess.hider.Restore()
 		h.mu.Lock()
 		sess.bubble = nil
 		h.mu.Unlock()

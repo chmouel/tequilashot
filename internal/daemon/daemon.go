@@ -20,6 +20,7 @@ import (
 	"github.com/chmouel/tequilashot/internal/gui"
 	"github.com/chmouel/tequilashot/internal/prefs"
 	"github.com/chmouel/tequilashot/internal/state"
+	"github.com/chmouel/tequilashot/internal/waybar"
 	"github.com/chmouel/tequilashot/pkg/protocol"
 )
 
@@ -112,6 +113,7 @@ func (d *Daemon) Stop() {
 	d.cancel()
 	d.recordingHandler.ShutdownReplay()
 	d.virtualCamera.Shutdown()
+	waybar.RestoreAll()
 
 	if d.listener != nil {
 		_ = d.listener.Close()

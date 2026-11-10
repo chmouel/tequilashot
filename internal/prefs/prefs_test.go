@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -150,5 +151,48 @@ func TestLoadNullCleanupValues(t *testing.T) {
 		if p.CleanupActiveWith(legacy, legacy) {
 			t.Fatalf("%s: a null clean-up setting must not leave deletion on", body)
 		}
+	}
+}
+
+func TestHideWaybarDefaultsOff(t *testing.T) {
+	if Default().HideWaybar {
+		t.Fatal("hiding Waybar must be opt-in")
+	}
+}
+
+func TestHideWaybarSurvivesSaveAndLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "preferences.json")
+	p := Default()
+	p.HideWaybar = true
+	if err := Save(path, p); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // a temporary file
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"hide_waybar": true`) {
+		t.Fatalf("saved file lacks the hide_waybar key: %s", data)
+	}
+	got, err := Load(path)
+	if err != nil || !got.HideWaybar {
+		t.Fatalf("hide_waybar = %v, %v; want true", got.HideWaybar, err)
+	}
+}
+
+func TestSanitiseKeepsHideWaybar(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "preferences.json")
+	if err := os.WriteFile(path, []byte(`{"hide_waybar": true, "frame_rate": 7, "video_codec": "vp9"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.HideWaybar {
+		t.Error("sanitising dropped hide_waybar")
+	}
+	if got.FrameRate != Default().FrameRate || got.VideoCodec != "" {
+		t.Errorf("invalid values were not fixed: frame_rate %d, video_codec %q", got.FrameRate, got.VideoCodec)
 	}
 }
