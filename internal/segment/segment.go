@@ -12,6 +12,9 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -25,6 +28,9 @@ const (
 	ModelEnv = prefs.EnvSegmentationModel
 	// LibraryEnv names the ONNX Runtime shared library to load.
 	LibraryEnv = prefs.EnvOnnxRuntimeLib
+
+	// minRuntime is the oldest ONNX Runtime providing the API the binding uses.
+	minRuntime = "1.29"
 
 	side = 320
 
@@ -44,6 +50,8 @@ var (
 		"/usr/lib/aarch64-linux-gnu/libonnxruntime.so",
 		"/usr/local/lib/libonnxruntime.so",
 	}
+
+	versionRe = regexp.MustCompile(`\d+\.\d+(\.\d+)?$`)
 
 	envOnce sync.Once
 	envErr  error
@@ -93,12 +101,29 @@ func initRuntime() error {
 		}
 		ort.SetSharedLibraryPath(lib)
 		if err := ort.InitializeEnvironment(); err != nil {
-			envErr = fmt.Errorf("failed to start ONNX Runtime: %w", err)
+			envErr = startError(lib, err)
 			return
 		}
 		loaded.Store(lib)
 	})
 	return envErr
+}
+
+// startError explains a failed start. The binding is built against a fixed
+// ONNX Runtime API; a library that predates it cannot provide that API.
+func startError(lib string, err error) error {
+	if !strings.Contains(err.Error(), "ORT API base") {
+		return fmt.Errorf("failed to start ONNX Runtime from %s: %w", lib, err)
+	}
+	found := lib
+	if real, rerr := filepath.EvalSymlinks(lib); rerr == nil {
+		found = real
+	}
+	have := "an older version"
+	if m := versionRe.FindString(filepath.Base(found)); m != "" {
+		have = m
+	}
+	return fmt.Errorf("%s (%s) is too old: this build needs ONNX Runtime %s or newer; upgrade it or set %s", found, have, minRuntime, LibraryEnv)
 }
 
 // Matter turns camera frames into frames whose background is transparent. It

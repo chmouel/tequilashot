@@ -7,7 +7,7 @@ require (
 	github.com/diamondburned/gotk4/pkg v0.4.2-0.20261031093702-169e0f82bca8
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/urfave/cli/v3 v3.14.0
-	github.com/yalue/onnxruntime_go v1.38.0
+	github.com/yalue/onnxruntime_go v1.36.0
 	golang.org/x/sys v0.50.0
 )
 
