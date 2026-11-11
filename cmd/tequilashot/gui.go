@@ -19,10 +19,13 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func guiAction(_ context.Context, _ *cli.Command) error {
+func guiAction(_ context.Context, c *cli.Command) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+	if c != nil && c.Bool("denoise") {
+		prefs.ForceAutoDenoise()
 	}
 
 	return gui.Run(gui.Backend{

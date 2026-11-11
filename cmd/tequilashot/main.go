@@ -26,6 +26,12 @@ func main() {
 		Name:                  "tequilashot",
 		EnableShellCompletion: true,
 		Usage:                 "Wayland screenshot and screen recording utility for Sway and Hyprland; without a command, opens the capture dialogue",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "denoise",
+				Usage: "Remove background noise from every new recording automatically",
+			},
+		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.Args().Present() {
 				return fmt.Errorf("unknown command %q", c.Args().First())
@@ -52,6 +58,7 @@ func main() {
 			toggleRecordCommand(),
 			virtualCameraCommand(),
 			cameraCommand(),
+			denoiseCommand(),
 			cameraBubbleCommand(),
 			entryCommand(),
 		},

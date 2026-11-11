@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chmouel/tequilashot/internal/denoise"
 	"github.com/chmouel/tequilashot/internal/prefs"
 
 	"golang.org/x/sys/unix"
@@ -106,7 +107,9 @@ func snapTrimSegments(ctx context.Context, source string, clock *frameClock, seg
 	return kept, nil
 }
 
-func trimFilters(segments []trimSegment, audio bool) string {
+// trimFilters joins the kept segments; a non-empty audioFilter is applied to
+// the joined sound.
+func trimFilters(segments []trimSegment, audio bool, audioFilter string) string {
 	var filters, inputs []string
 	for i, segment := range segments {
 		span := "start=" + trimSeconds(segment.start) + ":end=" + trimSeconds(segment.end)
@@ -123,9 +126,16 @@ func trimFilters(segments []trimSegment, audio bool) string {
 	outputs := "[video]"
 	if audio {
 		a = 1
-		outputs += "[audio]"
+		if audioFilter != "" {
+			outputs += "[joined]"
+		} else {
+			outputs += "[audio]"
+		}
 	}
 	filters = append(filters, fmt.Sprintf("%sconcat=n=%d:v=1:a=%d%s", strings.Join(inputs, ""), len(segments), a, outputs))
+	if audio && audioFilter != "" {
+		filters = append(filters, "[joined]"+audioFilter+"[audio]")
+	}
 	return strings.Join(filters, ";")
 }
 
@@ -147,9 +157,20 @@ func trimHasAudio(ctx context.Context, file string) (bool, error) {
 	return len(probe.Streams) > 0, nil
 }
 
-func exportTrim(ctx context.Context, source string, selection trimSelection, progress func(float64)) (string, MediaInfo, error) {
+// exportTrim saves the selection beside source. A non-empty denoiseModel also
+// removes background noise from the sound with that model.
+func exportTrim(ctx context.Context, source, denoiseModel string, selection trimSelection, progress func(float64)) (string, MediaInfo, error) {
 	if _, err := selection.segments(); err != nil {
 		return "", MediaInfo{}, err
+	}
+	suffix := "-trimmed"
+	if denoiseModel != "" {
+		if err := denoise.Ready(ctx); err != nil {
+			return "", MediaInfo{}, err
+		}
+		if !selection.remove && selection.start == 0 && selection.end == selection.duration {
+			suffix = "-denoised"
+		}
 	}
 	clock, err := probeFrameClock(ctx, source)
 	if err != nil {
@@ -171,6 +192,13 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 	if err != nil {
 		return "", MediaInfo{}, err
 	}
+	audioFilter := ""
+	if denoiseModel != "" {
+		if !audio {
+			return "", MediaInfo{}, denoise.ErrNoAudio
+		}
+		audioFilter = denoise.Filter(denoiseModel)
+	}
 	f, err := os.CreateTemp(filepath.Dir(source), ".tequilashot-trim-*.mp4")
 	if err != nil {
 		return "", MediaInfo{}, err
@@ -180,9 +208,13 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 	if err := f.Close(); err != nil {
 		return "", MediaInfo{}, err
 	}
+	st, err := os.Stat(source)
+	if err != nil {
+		return "", MediaInfo{}, err
+	}
 	args := []string{
 		"-hide_banner", "-v", "error", "-nostdin", "-y", "-copyts", "-start_at_zero", "-i", source,
-		"-filter_complex", trimFilters(segments, audio), "-map", "[video]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-fps_mode", "vfr", "-enc_time_base", "1:1000000",
+		"-filter_complex", trimFilters(segments, audio, audioFilter), "-map", "[video]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-fps_mode", "vfr", "-enc_time_base", "1:1000000",
 	}
 	if audio {
 		args = append(args, "-map", "[audio]", "-c:a", "aac", "-b:a", "192k")
@@ -226,7 +258,12 @@ func exportTrim(ctx context.Context, source string, selection trimSelection, pro
 	if info.Duration <= 0 || info.Width <= 0 || info.Height <= 0 {
 		return "", MediaInfo{}, errors.New("the trimmed recording contains no video")
 	}
-	base := strings.TrimSuffix(source, filepath.Ext(source)) + "-trimmed"
+	// FFmpeg must be able to write the private temporary file, so the
+	// source's permissions are applied only once it is complete.
+	if err := os.Chmod(tmp, st.Mode().Perm()); err != nil {
+		return "", MediaInfo{}, err
+	}
+	base := strings.TrimSuffix(source, filepath.Ext(source)) + suffix
 	for n := 1; ; n++ {
 		if err := ctx.Err(); err != nil {
 			return "", MediaInfo{}, err

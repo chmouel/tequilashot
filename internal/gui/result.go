@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chmouel/tequilashot/internal/denoise"
 	"github.com/chmouel/tequilashot/internal/external"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -39,6 +40,16 @@ type resultView struct {
 	images  *gtk.Box
 	trim    *gtk.Button
 	actions *gtk.Box
+	// edits holds Trim and Remove noise.
+	edits    *gtk.Box
+	denoise  *adw.ButtonContent
+	clean    *gtk.Button
+	progress *gtk.ProgressBar
+	// busy lists the widgets disabled whilst noise is being removed.
+	busy []gtk.Widgetter
+	// cleaning cancels noise removal; cleanDone closes when it has finished.
+	cleaning  context.CancelFunc
+	cleanDone chan struct{}
 
 	file string
 	info MediaInfo
@@ -112,9 +123,21 @@ func (a *app) buildResult() *gtk.Box {
 	r.images.Append(action("Copy image", "edit-copy-symbolic", a.copyResultImage))
 	r.images.Append(action("Edit", "document-edit-symbolic", a.editResult))
 	r.trim = action("Trim", "edit-cut-symbolic", a.openTrim)
+	r.clean = action("Remove noise", "audio-input-microphone-symbolic", a.denoiseResult)
+	r.clean.SetTooltipText("Save a copy with background noise removed from the sound")
+	r.denoise, _ = r.clean.Child().(*adw.ButtonContent)
+	r.edits = gtk.NewBox(gtk.OrientationHorizontal, 8)
+	r.edits.SetHomogeneous(true)
+	r.edits.Append(r.trim)
+	r.edits.Append(r.clean)
+	r.progress = gtk.NewProgressBar()
+	r.progress.SetShowText(true)
+	r.progress.SetVisible(false)
+	r.busy = []gtk.Widgetter{r.trim, row, row2, again}
 	r.actions = gtk.NewBox(gtk.OrientationVertical, 10)
 	r.actions.Append(r.images)
-	r.actions.Append(r.trim)
+	r.actions.Append(r.edits)
+	r.actions.Append(r.progress)
 	r.actions.Append(row)
 	r.actions.Append(row2)
 	r.actions.Append(again)
@@ -162,7 +185,8 @@ func (a *app) showResult(file string, info MediaInfo, mode string) {
 	a.pages.SetVisibleChildName(pageResult)
 	image := mode == ModeScreenshot
 	r.images.SetVisible(image)
-	r.trim.SetVisible(!image)
+	r.edits.SetVisible(!image)
+	r.clean.SetVisible(false)
 	if image {
 		a.win.SetTitle("Screenshot saved")
 		r.frame.SetContentFit(gtk.ContentFitContain)
@@ -189,6 +213,13 @@ func (a *app) showResult(file string, info MediaInfo, mode string) {
 		if image {
 			data, err = os.ReadFile(file) //nolint:gosec
 		} else {
+			if audio, err := denoise.HasAudio(ctx, file); err == nil && audio {
+				glib.IdleAdd(func() {
+					if a.res.gen == gen {
+						a.res.clean.SetVisible(true)
+					}
+				})
+			}
 			data, err = ExtractFrame(ctx, file, info.Duration)
 		}
 		if err != nil {

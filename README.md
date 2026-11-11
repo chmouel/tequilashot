@@ -217,6 +217,49 @@ previous page.
 Save copy creates a uniquely named `-trimmed.mp4` beside the original, which
 is kept. Saving shows progress and can be cancelled.
 
+### Removing background noise
+
+Recordings with sound offer Remove noise on the result page. It saves a copy
+named `-denoised` beside the original, with hiss, hum and fans taken out of
+the speech and keyboard clicks softened. The picture and any other streams,
+such as subtitles, attachments and chapters, are copied as they are, so this
+is quick and costs no quality. The trimmer has a Remove noise toggle as well,
+which cleans the sound of the copy it saves.
+
+It uses FFmpeg's `arnndn` filter with an
+[RNNoise](https://jmvalin.ca/demo/rnnoise/) speech model from
+[rnnoise-models](https://github.com/GregorR/rnnoise-models). The first time,
+the dialogue offers a one-off download of about 300 KB to
+`~/.local/share/tequilashot/rnnoise-speech.rnnn`; the checksum is verified.
+Preferences, or `TEQUILASHOT_DENOISE_MODEL`, can point at another `.rnnn`
+model. The model leaves key presses alone, so the cleaned sound then passes
+through FFmpeg's `adeclick` filter, which softens those short impulses. Its
+conservative defaults are kept, since more eager settings audibly damage the
+speech. Clicks are quieter rather than gone: a loud one may still be heard.
+
+Clicks that overlap your voice cannot be told apart from it, so some remain.
+Reduce Keyboard Clicks on the same page lowers loud, short high-frequency
+bursts by about 8 dB, at the cost of slightly duller consonants. It is off by
+default.
+
+Switch on Always Remove Noise on the Noise Removal preferences page to clean
+the sound of every new recording as soon as it is saved, without pressing
+anything. The original is kept and the cleaned copy opens on the result page
+as usual. If the model is not installed, the recording is left as saved and a
+notice explains why. The switch also takes effect for one session with
+`tequilashot --denoise` or `TEQUILASHOT_AUTO_DENOISE=1`. Screenshots, replays
+and manually saved trims are not cleaned automatically.
+
+Desktop sound and the microphone share one track, so anything that is not
+speech, music included, is treated as noise. It suits voice-overs best.
+
+```sh
+# Save recording-denoised.mp4 beside the original
+tequilashot denoise recording.mp4
+# Fetch the model first if it is missing, and choose the output
+tequilashot denoise --download-model -o clean.mp4 recording.mp4
+```
+
 ## Install
 
 You can install a package or build from source.
@@ -267,7 +310,7 @@ command-line tools only.
 | [slurp](https://github.com/emersion/slurp) | Selecting a region |
 | [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) | Recording video, audio and webcam input |
 | [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Clipboard commands |
-| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera, recording details and video trimming |
+| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera, recording details, video trimming and noise removal (with `arnndn` and `adeclick`) |
 
 Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
@@ -309,6 +352,12 @@ tequilashot movie-current-window --camera
 tequilashot pause-recording
 tequilashot stop-recording
 tequilashot toggle-record -a movie-current-window -w 2
+
+# Remove background noise from a recording's sound
+tequilashot denoise recording.mp4
+
+# Open the dialogue cleaning every new recording automatically
+tequilashot --denoise
 ```
 
 Recording flags:
@@ -445,7 +494,9 @@ settings it started with.
   model used to name clipboard selections.
 - Advanced: the encoder and extra gpu-screen-recorder options, the location of
   each helper program, and the background removal model, its download mirror
-  and the ONNX Runtime library.
+  and the ONNX Runtime library. The Noise Removal page there holds the speech
+  model used for cleaning recorded sound and whether it is applied to every
+  recording.
 
 Extra gpu-screen-recorder options are limited to those that cannot redirect
 the output or capture source: `-ac`, `-ab`, `-fm`, `-bm`, `-cr`, `-pixfmt`,
@@ -485,6 +536,8 @@ is the unit's environment that counts.
 | `TEQUILASHOT_AI_MODEL` | `gemini:gemini-2.5-flash-image` | Model used for AI-generated filenames |
 | `TEQUILASHOT_SEGMENTATION_MODEL` | `~/.local/share/tequilashot/u2net_human_seg.onnx` | Background removal model |
 | `TEQUILASHOT_ONNXRUNTIME_LIB` | system locations | ONNX Runtime shared library |
+| `TEQUILASHOT_DENOISE_MODEL` | `~/.local/share/tequilashot/rnnoise-speech.rnnn` | Noise removal model |
+| `TEQUILASHOT_AUTO_DENOISE` | off | Clean every new recording automatically; `1` or `0` overrides the preference |
 | `TEQUILASHOT_WAYBAR_POLL_INTERVAL` | `1s` | Waybar status polling interval; values below `100ms` use `100ms` |
 
 The daemon starts on demand. To start it with your session, install

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/chmouel/tequilashot/internal/denoise"
 	"github.com/chmouel/tequilashot/internal/prefs"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -56,6 +57,7 @@ type trimView struct {
 	play                                         *gtk.Button
 	preview                                      *gtk.Button
 	save                                         *gtk.Button
+	denoise                                      *gtk.ToggleButton
 	back                                         *gtk.Button
 	reset                                        *gtk.Button
 	controls                                     *gtk.Box
@@ -357,6 +359,10 @@ func (a *app) buildTrim() *gtk.Box {
 	slack := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	slack.SetHExpand(true)
 	footer.Append(slack)
+	t.denoise = trimModeToggle("audio-input-microphone-symbolic", "Remove noise", "Remove background noise from the sound whilst saving")
+	t.denoise.SetVisible(false)
+	t.denoise.ConnectToggled(a.updateTrim)
+	footer.Append(t.denoise)
 	t.save = trimLabeledButton("document-save-symbolic", "Save copy", "Save beside the original, which is kept", a.saveTrim)
 	t.save.AddCSSClass("suggested-action")
 	footer.Append(t.save)
@@ -541,6 +547,8 @@ func (a *app) openTrimSource(file string, info MediaInfo, mode, returnPage strin
 	t.start.SetRange(0, t.selection.duration.Seconds())
 	t.end.SetRange(0, t.selection.duration.Seconds())
 	t.keep.SetActive(true)
+	t.denoise.SetActive(false)
+	t.denoise.SetVisible(false)
 	t.syncing = false
 	t.status.SetVisible(false)
 	t.name.SetText(filepath.Base(file))
@@ -565,6 +573,15 @@ func (a *app) openTrimSource(file string, info MediaInfo, mode, returnPage strin
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel
 	a.loadTrimThumbnails(ctx)
+	gen := t.gen
+	go func() {
+		audio, err := denoise.HasAudio(ctx, file)
+		glib.IdleAdd(func() {
+			if err == nil && audio && gen == t.gen && !a.closing {
+				t.denoise.SetVisible(true)
+			}
+		})
+	}()
 	t.back.GrabFocus()
 }
 
@@ -584,7 +601,7 @@ func (a *app) updateTrim() {
 	a.syncTrimShortPreviews()
 	segments, err := t.selection.segments()
 	valid := err == nil
-	changed := t.selection.remove || t.selection.start > 0 || t.selection.end < t.selection.duration
+	changed := t.selection.remove || t.selection.start > 0 || t.selection.end < t.selection.duration || t.denoise.Active()
 	t.save.SetSensitive(valid && changed && t.export == nil)
 	t.preview.SetSensitive(valid)
 	if err != nil {
@@ -850,6 +867,16 @@ func (a *app) saveTrim() {
 	if _, err := t.selection.segments(); err != nil {
 		return
 	}
+	model := ""
+	if t.denoise.Active() {
+		if !denoise.ModelInstalled() {
+			a.offerDenoiseModel(denoiseTicket{
+				page: pageTrim, file: t.file, gen: t.gen, selection: t.selection, then: a.saveTrim,
+			})
+			return
+		}
+		model = denoise.ModelPath()
+	}
 	if t.media != nil {
 		t.media.Pause()
 	}
@@ -865,6 +892,7 @@ func (a *app) saveTrim() {
 	t.video.SetSensitive(false)
 	t.reset.SetSensitive(false)
 	t.save.SetSensitive(false)
+	t.denoise.SetSensitive(false)
 	if content, ok := t.back.Child().(*adw.ButtonContent); ok {
 		content.SetLabel("Cancel")
 		content.SetIconName("window-close-symbolic")
@@ -876,10 +904,11 @@ func (a *app) saveTrim() {
 	t.progress.SetVisible(true)
 	t.status.SetVisible(false)
 	file, selection, mode := t.file, t.selection, t.mode
+	cleanedOnly := model != "" && !selection.remove && selection.start == 0 && selection.end == selection.duration
 	go func() {
 		defer close(done)
 		defer cancel()
-		target, info, err := exportTrim(ctx, file, selection, func(fraction float64) {
+		target, info, err := exportTrim(ctx, file, model, selection, func(fraction float64) {
 			glib.IdleAdd(func() {
 				if !a.closing && t.done == done {
 					t.progress.SetFraction(fraction)
@@ -896,6 +925,7 @@ func (a *app) saveTrim() {
 			t.controls.SetSensitive(true)
 			t.video.SetSensitive(true)
 			t.reset.SetSensitive(true)
+			t.denoise.SetSensitive(true)
 			t.back.SetSensitive(true)
 			if content, ok := t.back.Child().(*adw.ButtonContent); ok {
 				content.SetLabel("Back")
@@ -916,7 +946,11 @@ func (a *app) saveTrim() {
 			}
 			a.stopTrim()
 			a.showResult(target, info, mode)
-			a.toast("Trimmed copy saved; the original is kept")
+			if cleanedOnly {
+				a.toast("Cleaned copy saved; the original is kept")
+			} else {
+				a.toast("Trimmed copy saved; the original is kept")
+			}
 		})
 	}()
 }
