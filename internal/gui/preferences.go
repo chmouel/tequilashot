@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chmouel/tequilashot/internal/denoise"
 	"github.com/chmouel/tequilashot/internal/prefs"
 	"github.com/chmouel/tequilashot/internal/segment"
 	"github.com/chmouel/tequilashot/pkg/protocol"
@@ -487,6 +488,7 @@ func (d *prefsDialog) advancedPage() *adw.PreferencesPage {
 	group.Add(d.navRow("Encoding", "Encoder and extra gpu-screen-recorder options", "applications-multimedia-symbolic", d.encodingPage))
 	group.Add(d.navRow("Programs", "Locations of the helper programs", "utilities-terminal-symbolic", d.programsPage))
 	group.Add(d.navRow("Background Removal", "Camera cut-out model and ONNX Runtime", "avatar-default-symbolic", d.backgroundPage))
+	group.Add(d.navRow("Noise Removal", "Speech model for cleaning recorded sound", "audio-input-microphone-symbolic", d.noisePage))
 	page.Add(group)
 
 	danger := newGroup("", "")
@@ -710,6 +712,93 @@ func (d *prefsDialog) downloadModel(row *adw.ButtonRow) {
 			d.a.syncPreview()
 		})
 	}()
+}
+
+// denoiseModelPath resolves the noise-removal model with the preferences
+// being edited.
+func (d *prefsDialog) denoiseModelPath() string {
+	if p := os.Getenv(prefs.EnvDenoiseModel); p != "" {
+		return p
+	}
+	if d.p.DenoiseModel != "" {
+		return d.p.DenoiseModel
+	}
+	return prefs.DefaultDenoiseModelPath()
+}
+
+func (d *prefsDialog) noisePage() *adw.NavigationPage {
+	page := adw.NewPreferencesPage()
+	model := newGroup("Model", "Removes background noise from speech when cleaning a recording. Leave the file empty to use "+prefs.DefaultDenoiseModelPath()+".")
+	state := adw.NewActionRow()
+	state.SetTitle("Status")
+	model.Add(state)
+	file := entryRow("Model File", d.p.DenoiseModel, func(text string) error {
+		d.update(func(p *prefs.Prefs) { p.DenoiseModel = text })
+		d.rerender()
+		return nil
+	})
+	model.Add(file)
+	download := adw.NewButtonRow()
+	download.SetStartIconName("folder-download-symbolic")
+	busy := false
+	download.ConnectActivated(func() {
+		if busy {
+			return
+		}
+		busy = true
+		download.SetSensitive(false)
+		download.SetTitle("Downloading…")
+		dest := d.denoiseModelPath()
+		go func() {
+			err := denoise.DownloadModelTo(context.Background(), dest, nil)
+			glib.IdleAdd(func() {
+				busy = false
+				if err != nil {
+					d.toast("The model could not be downloaded: " + err.Error())
+				} else {
+					d.toast("Noise removal model installed")
+				}
+				d.rerender()
+			})
+		}()
+	})
+	model.Add(download)
+	page.Add(model)
+
+	behaviour := newGroup("Behaviour", "")
+	always := switchRow("Always Remove Noise", "Cleans the sound of every new recording as soon as it is saved, keeping the original", d.p.AutoDenoise, func(on bool) {
+		d.update(func(p *prefs.Prefs) { p.AutoDenoise = on })
+	})
+	behaviour.Add(always)
+	behaviour.Add(switchRow("Reduce Keyboard Clicks", "Softens clicks that remain whilst you speak, at the cost of slightly duller high frequencies", d.p.ReduceClicks, func(on bool) {
+		d.update(func(p *prefs.Prefs) { p.ReduceClicks = on })
+	}))
+	page.Add(behaviour)
+
+	d.refresh = append(d.refresh, func() {
+		if os.Getenv(prefs.EnvAutoDenoise) != "" {
+			always.SetSensitive(false)
+			always.SetTooltipText(overriddenBy(prefs.EnvAutoDenoise))
+		}
+		env := d.envSet(prefs.EnvDenoiseModel)
+		file.SetSensitive(!env)
+		if env {
+			file.SetTooltipText(overriddenBy(prefs.EnvDenoiseModel))
+		}
+		path := d.denoiseModelPath()
+		_, err := os.Stat(path)
+		installed := err == nil
+		if installed {
+			state.SetSubtitle("Ready, using " + path)
+		} else {
+			state.SetSubtitle("The model is not installed at " + path)
+		}
+		if !busy {
+			download.SetTitle(map[bool]string{true: "Download Model Again", false: "Download Model"}[installed])
+			download.SetSensitive(true)
+		}
+	})
+	return navPage("Noise Removal", page)
 }
 
 // ---- Row helpers ----

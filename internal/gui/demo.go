@@ -101,11 +101,11 @@ func init() {
 			case "about":
 				a.showAbout()
 			case "preferences", "preferences-recording", "preferences-screenshots", "preferences-advanced",
-				"preferences-encoding", "preferences-programs", "preferences-background":
+				"preferences-encoding", "preferences-programs", "preferences-background", "preferences-noise":
 				d := a.openPreferences()
 				name, _ := strings.CutPrefix(page, "preferences-")
 				if sub := map[string]func() *adw.NavigationPage{
-					"encoding": d.encodingPage, "programs": d.programsPage, "background": d.backgroundPage,
+					"encoding": d.encodingPage, "programs": d.programsPage, "background": d.backgroundPage, "noise": d.noisePage,
 				}[name]; sub != nil {
 					d.dlg.SetVisiblePageName("advanced")
 					d.rerender()

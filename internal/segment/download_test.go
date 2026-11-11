@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chmouel/tequilashot/internal/fetch"
 	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
@@ -70,7 +71,7 @@ func TestDownloadModelRejectsInsecureRedirect(t *testing.T) {
 	oldClient := downloadClient
 	downloadClient = &http.Client{
 		Transport:     secure.Client().Transport,
-		CheckRedirect: rejectInsecureRedirect,
+		CheckRedirect: fetch.RejectInsecureRedirect,
 	}
 	t.Cleanup(func() {
 		prefs.Set(old)

@@ -24,6 +24,8 @@ const (
 	EnvAIModel           = "TEQUILASHOT_AI_MODEL"
 	EnvSegmentationModel = "TEQUILASHOT_SEGMENTATION_MODEL"
 	EnvOnnxRuntimeLib    = "TEQUILASHOT_ONNXRUNTIME_LIB"
+	EnvDenoiseModel      = "TEQUILASHOT_DENOISE_MODEL"
+	EnvAutoDenoise       = "TEQUILASHOT_AUTO_DENOISE"
 )
 
 // Defaults for the values the dialogue offers.
@@ -95,6 +97,14 @@ type Prefs struct {
 	SegmentationModel string `json:"segmentation_model,omitempty"`
 	OnnxRuntimeLib    string `json:"onnxruntime_lib,omitempty"`
 	ModelMirror       string `json:"model_mirror,omitempty"`
+
+	DenoiseModel string `json:"denoise_model,omitempty"`
+	// AutoDenoise cleans the sound of every new recording, keeping the
+	// original.
+	AutoDenoise bool `json:"auto_denoise,omitempty"`
+	// ReduceClicks softens keyboard clicks that survive noise removal, at
+	// the cost of slightly duller high frequencies.
+	ReduceClicks bool `json:"reduce_clicks,omitempty"`
 }
 
 // Default returns the preferences used when nothing has been saved.
@@ -287,6 +297,47 @@ func DefaultSegmentationModelPath() string {
 		dir = filepath.Join(home, ".local", "share")
 	}
 	return filepath.Join(dir, "tequilashot", "u2net_human_seg.onnx")
+}
+
+// DenoiseModelPath returns the noise-removal model file: the environment,
+// then the preferences, then the default location.
+func DenoiseModelPath() string {
+	if p := os.Getenv(EnvDenoiseModel); p != "" {
+		return p
+	}
+	if p := Current().DenoiseModel; p != "" {
+		return p
+	}
+	return DefaultDenoiseModelPath()
+}
+
+// DefaultDenoiseModelPath is where the noise-removal model is looked for and
+// downloaded when no other location is configured.
+func DefaultDenoiseModelPath() string {
+	return filepath.Join(filepath.Dir(DefaultSegmentationModelPath()), "rnnoise-speech.rnnn")
+}
+
+var autoDenoiseSession atomic.Bool
+
+// ForceAutoDenoise switches automatic noise removal on for this process only.
+// It is kept apart from the preferences so that saving them from the
+// dialogue cannot make it permanent.
+func ForceAutoDenoise() { autoDenoiseSession.Store(true) }
+
+// AutoDenoiseEnabled reports whether new recordings should have their sound
+// cleaned as soon as they are saved. The environment overrides the
+// preference, and an unrecognised value leaves it in charge.
+func AutoDenoiseEnabled() bool {
+	if autoDenoiseSession.Load() {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvAutoDenoise))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	return Current().AutoDenoise
 }
 
 // Program returns the configured path for a helper, or its name.

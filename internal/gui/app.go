@@ -151,8 +151,12 @@ type app struct {
 	// camPopulating suppresses camera selection handling whilst the list is filled.
 	camPopulating bool
 	closing       bool
-	previewDev    string
-	previewGen    int
+	// denoiseDownloading is set whilst the noise-removal model downloads, and
+	// denoisePending holds the view to continue once it arrives.
+	denoiseDownloading bool
+	denoisePending     *denoiseTicket
+	previewDev         string
+	previewGen         int
 
 	monitors []sway.Monitor
 	windows  []sway.Window
@@ -361,9 +365,16 @@ func (a *app) build() {
 		a.stopPreview()
 		trimDone := a.trim.done
 		a.stopTrim()
+		cleanDone := a.res.cleanDone
+		if a.res.cleaning != nil {
+			a.res.cleaning()
+		}
 		go func() {
 			if trimDone != nil {
 				<-trimDone
+			}
+			if cleanDone != nil {
+				<-cleanDone
 			}
 			if !a.gate.Wait(previewRelease) {
 				log.Print("camera preview did not exit in time")
@@ -1286,5 +1297,6 @@ func (a *app) finish(saved *savedCapture, err error) {
 			return
 		}
 		a.showResult(saved.file, saved.info, saved.mode)
+		a.autoDenoise()
 	})
 }

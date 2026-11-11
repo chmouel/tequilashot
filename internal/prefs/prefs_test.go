@@ -154,6 +154,47 @@ func TestLoadNullCleanupValues(t *testing.T) {
 	}
 }
 
+func TestAutoDenoiseDefaultsOffAndSurvivesSave(t *testing.T) {
+	if Default().AutoDenoise {
+		t.Fatal("automatic noise removal must be opt-in")
+	}
+	path := filepath.Join(t.TempDir(), "preferences.json")
+	p := Default()
+	p.AutoDenoise = true
+	if err := Save(path, p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil || !got.AutoDenoise {
+		t.Fatalf("auto_denoise = %v, %v; want true", got.AutoDenoise, err)
+	}
+}
+
+func TestAutoDenoiseEnvironmentOverride(t *testing.T) {
+	restore := Current()
+	t.Cleanup(func() { Set(restore) })
+	p := Default()
+	p.AutoDenoise = true
+	Set(p)
+	t.Setenv(EnvAutoDenoise, "")
+	if !AutoDenoiseEnabled() {
+		t.Fatal("the preference should apply without an override")
+	}
+	t.Setenv(EnvAutoDenoise, "off")
+	if AutoDenoiseEnabled() {
+		t.Fatal("the environment should be able to switch it off")
+	}
+	t.Setenv(EnvAutoDenoise, "perhaps")
+	if !AutoDenoiseEnabled() {
+		t.Fatal("an unrecognised value should leave the preference in charge")
+	}
+	t.Setenv(EnvAutoDenoise, "1")
+	Set(Default())
+	if !AutoDenoiseEnabled() {
+		t.Fatal("the environment should be able to switch it on")
+	}
+}
+
 func TestHideWaybarDefaultsOff(t *testing.T) {
 	if Default().HideWaybar {
 		t.Fatal("hiding Waybar must be opt-in")
@@ -194,5 +235,20 @@ func TestSanitiseKeepsHideWaybar(t *testing.T) {
 	}
 	if got.FrameRate != Default().FrameRate || got.VideoCodec != "" {
 		t.Errorf("invalid values were not fixed: frame_rate %d, video_codec %q", got.FrameRate, got.VideoCodec)
+	}
+}
+
+func TestForceAutoDenoiseIsNotAPreference(t *testing.T) {
+	t.Setenv(EnvAutoDenoise, "")
+	if AutoDenoiseEnabled() {
+		t.Fatal("automatic noise removal must start off")
+	}
+	t.Cleanup(func() { autoDenoiseSession.Store(false) })
+	ForceAutoDenoise()
+	if !AutoDenoiseEnabled() {
+		t.Fatal("the session override should switch it on")
+	}
+	if Current().Clone().AutoDenoise {
+		t.Fatal("the override must not enter the preferences that get saved")
 	}
 }
