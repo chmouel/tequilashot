@@ -50,14 +50,14 @@ func send(ctx context.Context, timeout int, icon, title, body string, actions []
 
 	conn, err := connect(sendCtx, lifetime)
 	if err != nil {
-		return "", fmt.Errorf("connect to notification bus: %w", err)
+		return "", fmt.Errorf("connect to notification bus: %w", callErr(sendCtx, err))
 	}
 	defer func() { _ = conn.Close() }()
 
 	obj := conn.Object(service, objectPath)
 	var capabilities []string
 	if err := obj.CallWithContext(sendCtx, service+".GetCapabilities", 0).Store(&capabilities); err != nil {
-		return "", fmt.Errorf("get notification capabilities: %w", err)
+		return "", fmt.Errorf("get notification capabilities: %w", callErr(sendCtx, err))
 	}
 	if slices.Contains(capabilities, "body-markup") {
 		body = html.EscapeString(body)
@@ -81,10 +81,10 @@ func send(ctx context.Context, timeout int, icon, title, body string, actions []
 		signals = make(chan *dbus.Signal, 16)
 		conn.Signal(signals)
 		if err := conn.AddMatchSignalContext(sendCtx, dbus.WithMatchSender(service), dbus.WithMatchObjectPath(objectPath), dbus.WithMatchInterface(service)); err != nil {
-			return "", fmt.Errorf("subscribe to notification actions: %w", err)
+			return "", fmt.Errorf("subscribe to notification actions: %w", callErr(sendCtx, err))
 		}
 		if err := conn.AddMatchSignalContext(sendCtx, dbus.WithMatchSender("org.freedesktop.DBus"), dbus.WithMatchInterface("org.freedesktop.DBus"), dbus.WithMatchMember("NameOwnerChanged"), dbus.WithMatchArg(0, service)); err != nil {
-			return "", fmt.Errorf("watch notification service: %w", err)
+			return "", fmt.Errorf("watch notification service: %w", callErr(sendCtx, err))
 		}
 	}
 
@@ -100,7 +100,7 @@ func send(ctx context.Context, timeout int, icon, title, body string, actions []
 	}
 	var id uint32
 	if err := obj.CallWithContext(sendCtx, service+".Notify", 0, "Tequilashot", uint32(0), icon, title, body, buttons, hints, int32(timeout)).Store(&id); err != nil {
-		return "", fmt.Errorf("send notification: %w", err)
+		return "", fmt.Errorf("send notification: %w", callErr(sendCtx, err))
 	}
 	cancelSend()
 	if !wait {
@@ -154,6 +154,15 @@ func send(ctx context.Context, timeout int, icon, title, body string, actions []
 			}
 		}
 	}
+}
+
+// callErr reports the context error when ctx has ended, since the connection
+// is closed on cancellation and pending calls may fail with a socket error first
+func callErr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
 }
 
 func connect(ctx, lifetime context.Context) (*dbus.Conn, error) {
