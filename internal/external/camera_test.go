@@ -75,6 +75,10 @@ func TestCameraValidate(t *testing.T) {
 		{Device: testCameraDevice, Shape: CameraSquare, Background: os.DevNull},
 		{Device: testCameraDevice, Shape: CameraCircle, Background: t.TempDir()},
 		{Device: testCameraDevice, Shape: CameraCircle, Background: bg, RemoveBackground: true},
+		{Device: testCameraDevice, Shape: CameraCircle, RemoveBackground: true, MattingModel: "human-seg"},
+		{Device: testCameraDevice, Shape: CameraCircle, RemoveBackground: true, MattingModel: "u2net;hflip=true"},
+		{Device: testCameraDevice, MattingModel: CameraMattingModnet},
+		{Device: testCameraDevice, Shape: CameraSquare, MattingModel: CameraMattingModnet},
 	}
 	for _, c := range bad {
 		if c.Validate() == nil {
@@ -317,5 +321,34 @@ func TestCameraBackgroundImage(t *testing.T) {
 	}
 	if slices.Contains(args, "--remove-background") {
 		t.Errorf("background image must not request removal: %v", args)
+	}
+}
+
+func TestCameraMattingModel(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		valid bool
+	}{
+		{CameraMattingModnet, true},
+		{CameraMattingU2Net, true},
+		{"MODNET", true},
+		{"", false},
+		{"u2netp", false},
+	} {
+		if got := ValidCameraMattingModel(tc.model); got != tc.valid {
+			t.Errorf("ValidCameraMattingModel(%q) = %v, want %v", tc.model, got, tc.valid)
+		}
+	}
+	c := CameraOverlay{Device: testCameraDevice, Shape: CameraCircle, RemoveBackground: true, MattingModel: CameraMattingU2Net}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("matting model on a cut-out camera rejected: %v", err)
+	}
+	args := c.bubbleArgs(0, 0, 100, image.Rect(0, 0, 1920, 1080))
+	i := slices.Index(args, "--matting-model")
+	if i < 0 || i+1 >= len(args) || args[i+1] != CameraMattingU2Net {
+		t.Fatalf("bubble arguments miss the matting model: %v", args)
+	}
+	if args := (CameraOverlay{Device: testCameraDevice}).bubbleArgs(0, 0, 100, image.Rect(0, 0, 1920, 1080)); slices.Contains(args, "--matting-model") {
+		t.Fatalf("an unset model must not be passed on: %v", args)
 	}
 }

@@ -61,6 +61,7 @@ func cameraBubbleAction(_ context.Context, c *cli.Command) error {
 		RemoveBackground: c.Bool("remove-background"),
 		Background:       c.String("background"),
 		NoRing:           c.Bool("no-ring"),
+		MattingModel:     c.String("matting-model"),
 	})
 }
 

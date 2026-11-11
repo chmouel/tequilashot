@@ -41,6 +41,9 @@ type BubbleOptions struct {
 	// Background is a PNG or JPEG shown behind the person instead.
 	Background string
 	NoRing     bool
+	// MattingModel names the model that removes the background: modnet or
+	// u2net. Empty uses the environment, then MODNet.
+	MattingModel string
 }
 
 // bubbleCSS draws a transparent window holding a circular picture with a ring.
@@ -149,7 +152,7 @@ func RunCameraBubble(opts BubbleOptions) error {
 		var onFrame func([]byte)
 		if opts.RemoveBackground || background != nil {
 			cut = newCutter(
-				background, opts.Mirror,
+				opts.MattingModel, background, opts.Mirror,
 				func(img *image.RGBA) {
 					glib.IdleAdd(func() {
 						if failure == nil {

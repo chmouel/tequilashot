@@ -22,6 +22,8 @@ import (
 const (
 	EnvSaveLocation      = "TEQUILASHOT_SAVE_LOCATION"
 	EnvAIModel           = "TEQUILASHOT_AI_MODEL"
+	EnvMattingModel      = "TEQUILASHOT_MATTING_MODEL"
+	EnvModnetModel       = "TEQUILASHOT_MODNET_MODEL"
 	EnvSegmentationModel = "TEQUILASHOT_SEGMENTATION_MODEL"
 	EnvOnnxRuntimeLib    = "TEQUILASHOT_ONNXRUNTIME_LIB"
 	EnvDenoiseModel      = "TEQUILASHOT_DENOISE_MODEL"
@@ -94,7 +96,9 @@ type Prefs struct {
 
 	ProgramPaths map[string]string `json:"programs,omitempty"`
 
+	// SegmentationModel is the U²-Net model file, still read for that model.
 	SegmentationModel string `json:"segmentation_model,omitempty"`
+	ModnetModel       string `json:"modnet_model,omitempty"`
 	OnnxRuntimeLib    string `json:"onnxruntime_lib,omitempty"`
 	ModelMirror       string `json:"model_mirror,omitempty"`
 
@@ -273,8 +277,8 @@ func Reload() error {
 	return err
 }
 
-// SegmentationModelPath returns the background-removal model file: the
-// environment, then the preferences, then the default location.
+// SegmentationModelPath returns the U²-Net model file: the environment, then
+// the preferences, then the default location.
 func SegmentationModelPath() string {
 	if p := os.Getenv(EnvSegmentationModel); p != "" {
 		return p
@@ -285,15 +289,37 @@ func SegmentationModelPath() string {
 	return DefaultSegmentationModelPath()
 }
 
-// DefaultSegmentationModelPath is where the model is looked for and
-// downloaded when no other location is configured.
+// DefaultSegmentationModelPath is where the U²-Net model is looked for when no
+// other location is configured.
 func DefaultSegmentationModelPath() string {
+	return filepath.Join(dataDir(), "u2net_human_seg.onnx")
+}
+
+// ModnetModelPath returns the MODNet model file: the environment, then the
+// preferences, then the default location.
+func ModnetModelPath() string {
+	if p := os.Getenv(EnvModnetModel); p != "" {
+		return p
+	}
+	if p := Current().ModnetModel; p != "" {
+		return p
+	}
+	return DefaultModnetModelPath()
+}
+
+// DefaultModnetModelPath is where the MODNet model is looked for and
+// downloaded when no other location is configured.
+func DefaultModnetModelPath() string {
+	return filepath.Join(dataDir(), "modnet.onnx")
+}
+
+func dataDir() string {
 	dir := os.Getenv("XDG_DATA_HOME")
 	if dir == "" {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".local", "share")
 	}
-	return filepath.Join(dir, "tequilashot", "u2net_human_seg.onnx")
+	return filepath.Join(dir, "tequilashot")
 }
 
 // DenoiseModelPath returns the noise-removal model file: the environment,
@@ -311,7 +337,7 @@ func DenoiseModelPath() string {
 // DefaultDenoiseModelPath is where the noise-removal model is looked for and
 // downloaded when no other location is configured.
 func DefaultDenoiseModelPath() string {
-	return filepath.Join(filepath.Dir(DefaultSegmentationModelPath()), "deepfilternet3.onnx")
+	return filepath.Join(dataDir(), "deepfilternet3.onnx")
 }
 
 var autoDenoiseSession atomic.Bool

@@ -58,6 +58,21 @@ func ValidCameraShape(shape string) bool {
 	return shape == CameraSquare || shape == CameraCircle
 }
 
+// Camera matting models accepted by CameraOverlay.
+const (
+	CameraMattingModnet = "modnet"
+	CameraMattingU2Net  = "u2net"
+)
+
+// ValidCameraMattingModel reports whether model names a matting model.
+func ValidCameraMattingModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case CameraMattingModnet, CameraMattingU2Net:
+		return true
+	}
+	return false
+}
+
 // CameraOverlay describes a webcam picture-in-picture layered over a recording.
 type CameraOverlay struct {
 	Device   string // empty disables the overlay
@@ -73,9 +88,12 @@ type CameraOverlay struct {
 	Background string
 	// NoRing hides the white ring; it needs RemoveBackground or Background.
 	NoRing bool
-	Width  int // chosen camera mode; zero lets gpu-screen-recorder pick
-	Height int
-	FPS    int
+	// MattingModel names the model that removes the background: modnet or
+	// u2net. Empty uses the environment, then MODNet.
+	MattingModel string
+	Width        int // chosen camera mode; zero lets gpu-screen-recorder pick
+	Height       int
+	FPS          int
 }
 
 // Enabled reports whether the overlay is switched on.
@@ -120,6 +138,14 @@ func (c CameraOverlay) Validate() error {
 	}
 	if c.NoRing && !c.RemoveBackground && c.Background == "" {
 		return fmt.Errorf("hiding the camera ring needs the background removed or replaced")
+	}
+	if c.MattingModel != "" {
+		if !ValidCameraMattingModel(c.MattingModel) {
+			return fmt.Errorf("invalid camera matting model %q (valid: modnet, u2net)", c.MattingModel)
+		}
+		if !c.RemoveBackground && c.Background == "" {
+			return fmt.Errorf("choosing a camera matting model needs the background removed or replaced")
+		}
 	}
 	if c.Width < 0 || c.Height < 0 || c.FPS < 0 {
 		return fmt.Errorf("invalid camera mode %dx%d@%d", c.Width, c.Height, c.FPS)

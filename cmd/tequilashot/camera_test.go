@@ -10,6 +10,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+const testProgram = "tequilashot"
+
 func TestCameraPositionOnlySentWhenExplicit(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
@@ -44,5 +46,29 @@ func TestCameraCycleCompletion(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "cycle") {
 		t.Fatalf("camera cycle missing from completion: %q", out.String())
+	}
+}
+
+func TestCameraMattingModelOnlySentWhenExplicit(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{testProgram, "--camera"}, ""},
+		{[]string{testProgram, "--camera", "--camera-matting-model", "u2net"}, "u2net"},
+		{[]string{testProgram, "--camera", "--camera-matting-model", "modnet"}, "modnet"},
+	} {
+		var opts map[string]interface{}
+		cmd := &cli.Command{Name: testProgram, Flags: cameraFlags(), Action: func(_ context.Context, c *cli.Command) error {
+			opts = withCameraOptions(c, map[string]interface{}{})
+			return nil
+		}}
+		if err := cmd.Run(context.Background(), tc.args); err != nil {
+			t.Fatal(err)
+		}
+		got, exists := opts["camera_matting_model"]
+		if (tc.want == "" && exists) || (tc.want != "" && got != tc.want) {
+			t.Fatalf("%v: matting model = %v (present %v)", tc.args, got, exists)
+		}
 	}
 }

@@ -22,11 +22,11 @@ func TestDownloadModelStopsOversizedMirror(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), "model.onnx")
-	t.Setenv(ModelEnv, "")
+	t.Setenv(ModnetModelEnv, "")
 	old := prefs.Current()
 	p := prefs.Default()
 	p.ModelMirror = srv.URL
-	p.SegmentationModel = dest
+	p.ModnetModel = dest
 	prefs.Set(p)
 	oldClient, oldLimit := downloadClient, maxModelBytes
 	downloadClient, maxModelBytes = srv.Client(), 1024
@@ -62,11 +62,11 @@ func TestDownloadModelRejectsInsecureRedirect(t *testing.T) {
 	defer secure.Close()
 
 	dest := filepath.Join(t.TempDir(), "model.onnx")
-	t.Setenv(ModelEnv, "")
+	t.Setenv(ModnetModelEnv, "")
 	old := prefs.Current()
 	p := prefs.Default()
 	p.ModelMirror = secure.URL
-	p.SegmentationModel = dest
+	p.ModnetModel = dest
 	prefs.Set(p)
 	oldClient := downloadClient
 	downloadClient = &http.Client{

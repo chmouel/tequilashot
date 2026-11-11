@@ -66,6 +66,9 @@ func (c CameraOverlay) bubbleArgs(x, y, diameter int, area image.Rectangle) []st
 	if c.NoRing {
 		args = append(args, "--no-ring")
 	}
+	if c.MattingModel != "" {
+		args = append(args, "--matting-model", c.MattingModel)
+	}
 	return args
 }
 

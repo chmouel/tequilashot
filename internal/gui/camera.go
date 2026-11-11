@@ -132,7 +132,7 @@ func (a *app) buildCamera() *gtk.ToggleButton {
 	})
 
 	a.modelRow = adw.NewActionRow()
-	a.modelRow.SetTitle("Segmentation model")
+	a.modelRow.SetTitle("Matting model")
 	a.modelProgress = gtk.NewProgressBar()
 	a.modelProgress.AddCSSClass("er-model-progress")
 	a.modelProgress.SetVAlign(gtk.AlignCenter)
@@ -391,8 +391,11 @@ func (a *app) syncAdvancedSummary() {
 		case segment.RuntimeAvailable() != nil:
 			parts = append(parts, "ONNX Runtime needed")
 			a.advancedRow.SetExpanded(true)
-		case !segment.ModelInstalled():
+		case segment.NeedsDownload():
 			parts = append(parts, "Model download needed")
+			a.advancedRow.SetExpanded(true)
+		case !segment.ModelInstalled():
+			parts = append(parts, "Matting model unavailable")
 			a.advancedRow.SetExpanded(true)
 		default:
 			parts = append(parts, "Background removed")
@@ -406,8 +409,9 @@ func (a *app) syncAdvancedSummary() {
 	a.advancedRow.SetSubtitle(strings.Join(parts, ", "))
 }
 
-// syncModelRow shows what removal still needs: the system's ONNX Runtime, or
-// the model, which can be downloaded here.
+// syncModelRow shows what removal still needs: the system's ONNX Runtime, the
+// MODNet model, which can be downloaded here, or the reason a model chosen by
+// flag or environment cannot be used, which no download would fix.
 func (a *app) syncModelRow() {
 	if !a.cutoutWanted() || a.modelBusy {
 		a.modelRow.SetVisible(a.modelBusy && a.cutoutWanted())
@@ -419,15 +423,26 @@ func (a *app) syncModelRow() {
 		a.modelRow.SetVisible(true)
 		a.modelRow.SetSubtitle("Install your distribution's onnxruntime package to enable")
 		a.modelBtn.SetVisible(false)
-	case !segment.ModelInstalled():
+	case segment.NeedsDownload():
 		a.modelRow.SetVisible(true)
-		a.modelRow.SetSubtitle("One-off 176 MB download to " + segment.ModelPath())
+		a.modelRow.SetSubtitle(fmt.Sprintf("One-off %.0f MB download to %s", float64(segment.ModnetModelSize)/(1<<20), segment.ModnetModelPath()))
 		a.modelBtn.SetLabel("Download")
 		a.modelBtn.SetVisible(true)
 		a.modelBtn.SetSensitive(true)
+	case !segment.ModelInstalled():
+		a.modelRow.SetVisible(true)
+		a.modelRow.SetSubtitle(modelProblem())
+		a.modelBtn.SetVisible(false)
 	default:
 		a.modelRow.SetVisible(false)
 	}
+}
+
+func modelProblem() string {
+	if err := segment.ModelProblem(); err != nil {
+		return "Background removal cannot start: " + err.Error()
+	}
+	return "Background removal cannot start: the selected model is not available"
 }
 
 // downloadModel fetches the model in the background, then restarts the preview.
@@ -630,7 +645,7 @@ func (a *app) syncPreview() {
 	w, h := external.PreviewMode(a.camModes, device)
 	if cut {
 		a.previewCutter = newCutter(
-			nil, false,
+			"", nil, false,
 			func(img *image.RGBA) {
 				glib.IdleAdd(func() {
 					if gen == a.previewGen {

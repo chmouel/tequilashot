@@ -370,6 +370,7 @@ func cameraBubbleCommand() *cli.Command {
 			&cli.BoolFlag{Name: "remove-background"},
 			&cli.StringFlag{Name: "background"},
 			&cli.BoolFlag{Name: "no-ring"},
+			&cli.StringFlag{Name: "matting-model"},
 		},
 		Action: cameraBubbleAction,
 	}
@@ -628,6 +629,10 @@ func cameraFlags() []cli.Flag {
 			Name:  "camera-no-ring",
 			Usage: "Hide the white ring around the round camera (needs --camera-remove-background or --camera-background)",
 		},
+		&cli.StringFlag{
+			Name:  "camera-matting-model",
+			Usage: "Model that removes the camera background: modnet or u2net (default: modnet, or $TEQUILASHOT_MATTING_MODEL)",
+		},
 	}
 }
 
@@ -656,6 +661,9 @@ func withCameraOptions(c *cli.Command, options map[string]interface{}) map[strin
 	options["camera_mirror"] = c.Bool("camera-mirror")
 	options["camera_remove_background"] = c.Bool("camera-remove-background")
 	options["camera_no_ring"] = c.Bool("camera-no-ring")
+	if c.IsSet("camera-matting-model") {
+		options["camera_matting_model"] = c.String("camera-matting-model")
+	}
 	if bg := c.String("camera-background"); bg != "" {
 		// The daemon runs elsewhere, so a relative path would not resolve.
 		if abs, err := filepath.Abs(bg); err == nil {

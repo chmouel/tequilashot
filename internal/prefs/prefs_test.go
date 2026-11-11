@@ -252,3 +252,30 @@ func TestForceAutoDenoiseIsNotAPreference(t *testing.T) {
 		t.Fatal("the override must not enter the preferences that get saved")
 	}
 }
+
+func TestModnetModelPathPrecedence(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv(EnvModnetModel, "")
+	old := Current()
+	t.Cleanup(func() { Set(old) })
+
+	p := Default()
+	p.ModnetModel = "/srv/prefs/modnet.onnx"
+	Set(p)
+	if got, want := ModnetModelPath(), "/srv/prefs/modnet.onnx"; got != want {
+		t.Fatalf("prefs model path = %q, want %q", got, want)
+	}
+	t.Setenv(EnvModnetModel, "/srv/env/modnet.onnx")
+	if got, want := ModnetModelPath(), "/srv/env/modnet.onnx"; got != want {
+		t.Fatalf("env model path = %q, want %q", got, want)
+	}
+	t.Setenv(EnvModnetModel, "")
+	Set(Default())
+	if got, want := ModnetModelPath(), filepath.Join(data, "tequilashot", "modnet.onnx"); got != want {
+		t.Fatalf("default model path = %q, want %q", got, want)
+	}
+	if got, want := DefaultSegmentationModelPath(), filepath.Join(data, "tequilashot", "u2net_human_seg.onnx"); got != want {
+		t.Fatalf("default U²-Net path = %q, want %q", got, want)
+	}
+}

@@ -55,6 +55,102 @@ FFmpeg. The click times come from `internal/keylog`, which the daemon starts
 whilst the microphone is recorded and which keeps only key times, in a small
 file per recording under `~/.local/state/tequilashot/keytimes`.
 
+`internal/segment` runs MODNet by default. `internal/segment/modnet.go`
+implements the same `matting` interface as the older U²-Net path, so the
+camera, recording and virtual-camera paths are shared; see
+[MODNet matting](#modnet-matting).
+
+## MODNet matting
+
+The camera matting used by Remove background and `--camera-background` runs
+MODNet. U²-Net is kept as an alternative and picks the same `matting` interface.
+
+The model is chosen by, in order: `--camera-matting-model`
+(`modnet` or `u2net`, on the recording and virtual-camera commands),
+`TEQUILASHOT_MATTING_MODEL`, then MODNet. The flag travels to the daemon as the
+`camera_matting_model` request option and on to the camera bubble, so it
+overrides the environment of the daemon that runs the bubble. An unknown value
+is refused rather than falling back, and naming a model without background
+removal or replacement is refused like `--camera-no-ring` is. For live use, set
+the environment of the daemon that launches the bubble, then restart that
+daemon when no capture is running.
+
+An installation upgraded from an earlier release may have only the U²-Net file.
+When MODNet is the default rather than explicitly requested, its file is
+missing and the U²-Net file exists, matting uses U²-Net and logs a warning
+naming both files and how to download MODNet. Only a missing file falls back:
+any other stat error is reported, so a permissions or symlink problem cannot
+change the model quietly. Once MODNet is requested by the flag or the
+environment, a missing file is an error, as is a missing U²-Net file when that
+model is requested.
+
+`TEQUILASHOT_MODNET_MODEL` names the model file, then the `modnet_model`
+preference, then `~/.local/share/tequilashot/modnet.onnx`. Nothing is
+downloaded automatically, but the Download button on the Background Removal page
+of Preferences and the camera dialogue fetch the model through
+`internal/segment/download.go`, which verifies the SHA-256 and the size before
+the file replaces an existing one. The camera dialogue offers that download
+only when MODNet is the model in use; when a model chosen by the flag or the
+environment is missing or invalid it names the problem and the file instead,
+since fetching MODNet would not help. The U²-Net path still reads the older
+`segmentation_model` preference and `TEQUILASHOT_SEGMENTATION_MODEL`. Model
+files stay out of git.
+
+The model is an ONNX conversion of MODNet published by Hugging Face's Xenova
+project, under Apache-2.0 like the upstream
+[ZHKKKe/MODNet](https://github.com/ZHKKKe/MODNet). The download is pinned by
+commit rather than a moving branch:
+`https://huggingface.co/Xenova/modnet/resolve/fa2fa546052fba4c08921230a26cc69a333fca12/onnx/model.onnx`,
+SHA-256 `07c308cf0fc7e6e8b2065a12ed7fc07e1de8febb7dc7839d7b7f15dd66584df9`,
+25,888,640 bytes. Installing it by hand is also possible:
+
+```sh
+mkdir -p ~/.local/share/tequilashot
+curl -fL --proto '=https' -o ~/.local/share/tequilashot/modnet.onnx \
+  https://huggingface.co/Xenova/modnet/resolve/fa2fa546052fba4c08921230a26cc69a333fca12/onnx/model.onnx
+sha256sum ~/.local/share/tequilashot/modnet.onnx
+# expect 07c308cf0fc7e6e8b2065a12ed7fc07e1de8febb7dc7839d7b7f15dd66584df9
+```
+
+The graph takes `input`, a float32 NCHW tensor of
+shape `[1, 3, H, W]` with RGB scaled to -1..1, and returns `output`, a float32
+tensor of shape `[1, 1, H, W]` whose last node is a sigmoid: an alpha matte
+already in 0..1. The implementation therefore uses the output directly,
+without the min-max stretch the U²-Net path needs.
+
+Geometry follows the model's own `onnx/inference_onnx.py`: the short edge
+becomes 512 unless the picture straddles 512 (one edge below, one above), then
+both edges are rounded down to a multiple of 32 and kept at 32 or more. Input
+is resampled bilinearly; the output alpha is resampled to the frame with the
+same helper the U²-Net path uses. The official script uses OpenCV
+`INTER_AREA`, so edge pixels may differ slightly.
+
+### Comparing the models
+
+`hack/mattebench` runs either model or both over saved pictures or a directory
+of extracted camera frames. It writes an alpha matte and a composite over a
+checkerboard for each picture and model, and reports latency, throughput,
+foreground coverage and the mean alpha difference between models.
+
+```sh
+go run ./hack/mattebench -input ~/Pictures/frames -out tmp/mattebench -runs 20
+```
+
+`-models modnet` checks the default alone. Timings cover preprocessing,
+inference and blending on an already decoded picture; decoding and PNG output
+are outside them. It needs both model files and downloads neither, and it
+never opens the camera. On one desktop CPU, on a 460 by 460 portrait with
+three timed runs each, U²-Net averaged 244 ms (4.1 frames a second) and MODNet
+256 ms (3.9 frames a second), with a mean alpha difference of 0.0076. These
+figures say how fast the models ran on that machine, not which matte is
+better, and the order between them has changed between machines and runs:
+judge quality from the written mattes and composites, and measure on your own
+frames before relying on it.
+
+Limitations: the conversion is third-party rather than the official PyTorch
+checkpoint, accuracy has not been measured against a labelled matting dataset,
+and MODNet is tuned for one person.
+
 ## Screenshots
 
 `make screenshots` rebuilds the dialogue and social-preview images in
@@ -166,6 +262,7 @@ being overwritten. Stopping recovers completed exports left in staging.
 | `camera_mirror` | boolean | Recordings |
 | `camera_background` | string, absolute path of a PNG or JPEG shown behind the person; needs the circle shape, excludes `camera_remove_background` | Recordings and virtual camera |
 | `camera_no_ring` | boolean; hides the ring, needs `camera_remove_background` or `camera_background` | Recordings and virtual camera |
+| `camera_matting_model` | `modnet` or `u2net`; needs `camera_remove_background` or `camera_background`, overrides `TEQUILASHOT_MATTING_MODEL` | Recordings and virtual camera |
 | `camera_remove_background` | boolean; needs the circle shape (always set for the virtual camera) | Recordings and virtual camera |
 | `quiet_finish` | boolean; the finish notification omits its file actions because the client shows the result | Recordings |
 | `start_action` | string, a recording action | `toggle-record` |

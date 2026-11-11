@@ -162,8 +162,8 @@ func (d *prefsDialog) envSet(name string) bool {
 			return st.SaveDirEnv
 		case prefs.EnvAIModel:
 			return st.AIModelEnv
-		case prefs.EnvSegmentationModel:
-			return st.SegmentationModelEnv
+		case prefs.EnvModnetModel:
+			return st.ModnetModelEnv
 		case prefs.EnvOnnxRuntimeLib:
 			return st.OnnxRuntimeLibEnv
 		}
@@ -171,22 +171,22 @@ func (d *prefsDialog) envSet(name string) bool {
 	return os.Getenv(name) != ""
 }
 
-// modelPath is the model file the daemon's camera bubble loads, resolved
-// like the daemon does but with the preferences being edited.
+// modelPath is the MODNet file the daemon's camera bubble loads, resolved like
+// the daemon does but with the preferences being edited.
 func (d *prefsDialog) modelPath() string {
-	if d.envSet(prefs.EnvSegmentationModel) {
-		if d.status != nil && d.status.SegmentationModel != "" {
-			return d.status.SegmentationModel
+	if d.envSet(prefs.EnvModnetModel) {
+		if d.status != nil && d.status.ModnetModel != "" {
+			return d.status.ModnetModel
 		}
-		return os.Getenv(prefs.EnvSegmentationModel)
+		return os.Getenv(prefs.EnvModnetModel)
 	}
-	if d.p.SegmentationModel != "" {
-		return d.p.SegmentationModel
+	if d.p.ModnetModel != "" {
+		return d.p.ModnetModel
 	}
-	if d.status != nil && d.status.SegmentationModelDefault != "" {
-		return d.status.SegmentationModelDefault
+	if d.status != nil && d.status.ModnetModelDefault != "" {
+		return d.status.ModnetModelDefault
 	}
-	return segment.DefaultModelPath()
+	return segment.DefaultModnetModelPath()
 }
 
 // legacySaveDir is the pre-preferences save folder as the daemon sees it.
@@ -604,12 +604,12 @@ func (d *prefsDialog) programsPage() *adw.NavigationPage {
 func (d *prefsDialog) backgroundPage() *adw.NavigationPage {
 	page := adw.NewPreferencesPage()
 
-	model := newGroup("Model", "Removes the background behind the round camera. Leave the file empty to use "+segment.DefaultModelPath()+".")
+	model := newGroup("Model", "Removes the background behind the round camera. Leave the file empty to use "+prefs.DefaultModnetModelPath()+".")
 	state := adw.NewActionRow()
 	state.SetTitle("Status")
 	model.Add(state)
-	file := entryRow("Model File", d.p.SegmentationModel, func(text string) error {
-		d.update(func(p *prefs.Prefs) { p.SegmentationModel = text })
+	file := entryRow("Model File", d.p.ModnetModel, func(text string) error {
+		d.update(func(p *prefs.Prefs) { p.ModnetModel = text })
 		d.rerender()
 		return nil
 	})
@@ -644,10 +644,10 @@ func (d *prefsDialog) backgroundPage() *adw.NavigationPage {
 	page.Add(runtime)
 
 	d.refresh = append(d.refresh, func() {
-		modelEnv := d.envSet(prefs.EnvSegmentationModel)
+		modelEnv := d.envSet(prefs.EnvModnetModel)
 		file.SetSensitive(!modelEnv)
 		if modelEnv {
-			file.SetTooltipText(overriddenBy(prefs.EnvSegmentationModel))
+			file.SetTooltipText(overriddenBy(prefs.EnvModnetModel))
 		}
 		libEnv := d.envSet(prefs.EnvOnnxRuntimeLib)
 		lib.SetSensitive(!libEnv)

@@ -86,7 +86,7 @@
     <div class="txt">
       <h3>Round camera</h3>
       <p>The Circle shape puts the webcam on screen as a round bubble with a white ring, above other windows, and the recording captures it from there. Drag it around, or run <code>tequilashot camera cycle</code> to move it clockwise between corners.</p>
-      <p>Remove background shows only you in the circle, and your surroundings become transparent. A person-segmentation model runs on the CPU, at roughly six frames a second, so expect a lower frame rate.</p>
+      <p>Remove background shows only you in the circle, and your surroundings become transparent. A portrait-matting model runs on the CPU, so expect a much lower frame rate.</p>
     </div>
     <img class="shot" src="img/dialogue-camera-circle.png" alt="Camera panel with the Circle shape selected and a round webcam in the preview">
   </div>
@@ -141,13 +141,13 @@ tequilashot replay-stop</code></pre>
 
   <div class="grid">
     <div class="card"><h3>AI file names</h3><p>When a clipboard capture asks for a file name, tequilashot can send the picture to aichat and suggest one while you type. The model defaults to <code>gemini:gemini-2.5-flash-image</code> and follows whatever providers and keys you already configured in aichat. Turn it off and the plain name entry stays.</p></div>
-    <div class="card"><h3>Background removal</h3><p>The round camera's Remove background runs the <a href="https://github.com/danielgatis/rembg/releases/tag/v0.0.0"><code>u2net_human_seg.onnx</code></a> person-segmentation model (Apache-2.0) on your CPU through <a href="https://onnxruntime.ai/">ONNX Runtime</a>. It works in recordings and in the virtual camera, and the Download button in the dialogue fetches the model once.</p></div>
+    <div class="card"><h3>Background removal</h3><p>The round camera's Remove background runs the <a href="https://github.com/ZHKKKe/MODNet"><code>MODNet</code></a> portrait-matting model (Apache-2.0) on your CPU through <a href="https://onnxruntime.ai/">ONNX Runtime</a>. It works in recordings and in the virtual camera, and the Download button in Preferences fetches and verifies the model once. The older U²-Net model remains available with <code>--camera-matting-model u2net</code> or <code>TEQUILASHOT_MATTING_MODEL=u2net</code>.</p></div>
     <div class="card"><h3>Noise removal</h3><p>Remove noise runs the <a href="https://github.com/Rikorose/DeepFilterNet">DeepFilterNet3</a> speech model (MIT and Apache-2.0), about 9&nbsp;MB, on your CPU through ONNX Runtime. Whilst the microphone records, tequilashot notes when keys go down and up, never which ones, so that each keyboard click can be found in the sound and turned down. The first time, the dialogue offers the download; the checksum is verified before the model is used.</p></div>
   </div>
 
-  <p class="sub">Models live in <code>~/.local/share/tequilashot/</code>, and Preferences or environment variables can point elsewhere: <code>TEQUILASHOT_AI_MODEL</code> for the naming model, <code>TEQUILASHOT_SEGMENTATION_MODEL</code> and <code>TEQUILASHOT_ONNXRUNTIME_LIB</code> for background removal, <code>TEQUILASHOT_DENOISE_MODEL</code> for noise removal. The Advanced preferences page also has a mirror setting for the segmentation model, restricted to <code>https://</code>.</p>
+  <p class="sub">Models live in <code>~/.local/share/tequilashot/</code>, and Preferences or environment variables can point elsewhere: <code>TEQUILASHOT_AI_MODEL</code> for the naming model, <code>TEQUILASHOT_MATTING_MODEL</code>, <code>TEQUILASHOT_MODNET_MODEL</code> and <code>TEQUILASHOT_ONNXRUNTIME_LIB</code> for background removal, <code>TEQUILASHOT_DENOISE_MODEL</code> for noise removal. The Advanced preferences page also has a mirror setting for the matting model download, restricted to <code>https://</code>.</p>
 
-  <p class="sub">If the ONNX Runtime library or the segmentation model is missing, the round camera is hidden and an error is reported rather than showing your real background. A recording or virtual camera that is already running carries on without it.</p>
+  <p class="sub">If the ONNX Runtime library or the matting model is missing, the round camera is hidden and an error is reported rather than showing your real background. A recording or virtual camera that is already running carries on without it.</p>
 </div></section>
 
 <section id="install"><div class="wrap">

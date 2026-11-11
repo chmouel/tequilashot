@@ -19,7 +19,7 @@ func TestApplyMaskPremultipliesAndScales(t *testing.T) {
 			mask[y*side+x] = 1
 		}
 	}
-	applyMask(img, mask, nil)
+	applyMask(img, mask, side, side, nil)
 	left := img.RGBAAt(2, 32)
 	right := img.RGBAAt(61, 32)
 	if left != (color.RGBA{}) {
@@ -53,7 +53,7 @@ func TestApplyMaskBlendsOverBackground(t *testing.T) {
 			mask[y*side+x] = 1
 		}
 	}
-	applyMask(img, mask, bg)
+	applyMask(img, mask, side, side, bg)
 	if got := img.RGBAAt(2, 32); got != (color.RGBA{10, 20, 30, 255}) {
 		t.Fatalf("background pixel = %v, want the background picture", got)
 	}

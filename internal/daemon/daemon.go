@@ -412,15 +412,15 @@ func (d *Daemon) preferencesStatus() protocol.Response {
 	p := prefs.Current()
 	dir := d.cfg.SaveDir()
 	data, _ := json.Marshal(protocol.PreferencesStatus{
-		SaveDir:                  dir,
-		LegacySaveDir:            prefs.LegacySaveDir(),
-		SaveDirEnv:               os.Getenv(prefs.EnvSaveLocation) != "",
-		AIModelEnv:               os.Getenv(prefs.EnvAIModel) != "",
-		SegmentationModelEnv:     os.Getenv(prefs.EnvSegmentationModel) != "",
-		SegmentationModel:        prefs.SegmentationModelPath(),
-		SegmentationModelDefault: prefs.DefaultSegmentationModelPath(),
-		OnnxRuntimeLibEnv:        os.Getenv(prefs.EnvOnnxRuntimeLib) != "",
-		CleanupActive:            p.CleanupActive(dir),
+		SaveDir:            dir,
+		LegacySaveDir:      prefs.LegacySaveDir(),
+		SaveDirEnv:         os.Getenv(prefs.EnvSaveLocation) != "",
+		AIModelEnv:         os.Getenv(prefs.EnvAIModel) != "",
+		ModnetModelEnv:     os.Getenv(prefs.EnvModnetModel) != "",
+		ModnetModel:        prefs.ModnetModelPath(),
+		ModnetModelDefault: prefs.DefaultModnetModelPath(),
+		OnnxRuntimeLibEnv:  os.Getenv(prefs.EnvOnnxRuntimeLib) != "",
+		CleanupActive:      p.CleanupActive(dir),
 	})
 	return protocol.Response{Success: true, Message: string(data), State: d.state.GetState()}
 }
@@ -484,7 +484,7 @@ type cameraRequest struct {
 func parseCameraRequest(options map[string]any) (cameraRequest, error) {
 	var req cameraRequest
 	var on, mirror, removeBackground, noRing bool
-	var device, position, size, shape, background string
+	var device, position, size, shape, background, mattingModel string
 	for _, f := range []struct {
 		key string
 		dst any
@@ -498,6 +498,7 @@ func parseCameraRequest(options map[string]any) (cameraRequest, error) {
 		{"camera_remove_background", &removeBackground},
 		{"camera_background", &background},
 		{"camera_no_ring", &noRing},
+		{"camera_matting_model", &mattingModel},
 	} {
 		v, ok := options[f.key]
 		if !ok {
@@ -522,6 +523,6 @@ func parseCameraRequest(options map[string]any) (cameraRequest, error) {
 		return req, nil
 	}
 	req.enabled = true
-	req.overlay = external.CameraOverlay{Device: device, Position: position, Size: size, Shape: shape, Mirror: mirror, RemoveBackground: removeBackground, Background: background, NoRing: noRing}
+	req.overlay = external.CameraOverlay{Device: device, Position: position, Size: size, Shape: shape, Mirror: mirror, RemoveBackground: removeBackground, Background: background, NoRing: noRing, MattingModel: mattingModel}
 	return req, nil
 }

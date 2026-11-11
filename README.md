@@ -104,7 +104,7 @@ Add Hide ring (`--camera-no-ring`) to drop the white ring as well.
 To put a picture behind you instead of transparency, pass
 `--camera-background <file>` with a PNG or JPEG. The picture is cropped to fill
 the circle and replaces your surroundings in recordings and in the virtual
-camera. It uses the same segmentation as Remove background, so the
+camera. It uses the same matting as Remove background, so the
 requirements below apply, and the two options cannot be combined. With
 `--camera-mirror` the picture itself is not mirrored.
 
@@ -113,23 +113,34 @@ tequilashot movie-screen --camera --camera-shape circle \
     --camera-background ~/Pictures/office.jpg --camera-no-ring
 ```
 
-The segmentation runs on the CPU, so expect a lower frame rate than the plain
-camera, roughly six pictures a second on a desktop processor. It is a
-person-segmentation model and will occasionally clip hair or hands. Nothing is
-downloaded behind your back, but the dialogue offers a Download button for the model. You need:
+The matting runs on the CPU, so expect a much lower frame rate than the plain
+camera. It is a portrait-matting model and will occasionally clip hair or
+hands. Nothing is downloaded behind your back, but the Download button on the
+Background Removal page of Preferences fetches and verifies the model once.
+You need:
 
 - [ONNX Runtime](https://onnxruntime.ai/) as a shared library, found in the usual
   system locations, set in Preferences or through
   `TEQUILASHOT_ONNXRUNTIME_LIB`. The Go binding is
   built for version 1.29.
-- The `u2net_human_seg.onnx` model (Apache-2.0, from the
-  [rembg releases](https://github.com/danielgatis/rembg/releases/tag/v0.0.0)),
-  saved as `~/.local/share/tequilashot/u2net_human_seg.onnx`, or wherever
-  Preferences or `TEQUILASHOT_SEGMENTATION_MODEL` say.
+- The `modnet.onnx` model, saved as
+  `~/.local/share/tequilashot/modnet.onnx`, or wherever Preferences or
+  `TEQUILASHOT_MODNET_MODEL` say.
 
-If either is missing, or the segmentation fails, the round camera is hidden and
+If either is missing, or the matting fails, the round camera is hidden and
 an error is reported instead of showing your real background. A recording or
 the virtual camera that is already running carries on without it.
+
+#### U²-Net as an alternative
+
+U²-Net remains available for comparison through
+`--camera-matting-model u2net` or `TEQUILASHOT_MATTING_MODEL=u2net`. It is the
+older model, and its `u2net_human_seg.onnx` file
+(Apache-2.0, from the [rembg releases](https://github.com/danielgatis/rembg/releases/tag/v0.0.0))
+must be installed by hand as `~/.local/share/tequilashot/u2net_human_seg.onnx`,
+or wherever Preferences or `TEQUILASHOT_SEGMENTATION_MODEL` say. See the
+[developer guide](DEVELOPER.md#modnet-matting) for the provenance, checksum and
+a comparison using saved pictures, without opening your camera.
 
 ### Virtual camera
 
@@ -387,6 +398,8 @@ Recording flags:
   `--camera-size` (`small`, `medium`, `large`), `--camera-mirror` and
   `--camera-shape circle` for the [round camera](#round-camera), which also
   accepts `--camera-remove-background` or `--camera-background <file>`.
+- `--camera-matting-model` (`modnet`, `u2net`): model behind a removed or
+  replaced camera background. Defaults to `modnet`.
 - `--crop-top <px>` (screen recordings only): trim pixels from the top.
 
 ### Hyprland key bindings
@@ -551,7 +564,9 @@ is the unit's environment that counts.
 | --- | --- | --- |
 | `TEQUILASHOT_SAVE_LOCATION` | `~/Downloads/Screenshots` | Screenshot and recording directory |
 | `TEQUILASHOT_AI_MODEL` | `gemini:gemini-2.5-flash-image` | Model used for AI-generated filenames |
-| `TEQUILASHOT_SEGMENTATION_MODEL` | `~/.local/share/tequilashot/u2net_human_seg.onnx` | Background removal model |
+| `TEQUILASHOT_MATTING_MODEL` | `modnet` | Model behind the removed camera background: `modnet` or `u2net` |
+| `TEQUILASHOT_MODNET_MODEL` | `~/.local/share/tequilashot/modnet.onnx` | MODNet model file |
+| `TEQUILASHOT_SEGMENTATION_MODEL` | `~/.local/share/tequilashot/u2net_human_seg.onnx` | U²-Net model file, used when that model is chosen |
 | `TEQUILASHOT_ONNXRUNTIME_LIB` | system locations | ONNX Runtime shared library |
 | `TEQUILASHOT_DENOISE_MODEL` | `~/.local/share/tequilashot/deepfilternet3.onnx` | Noise removal model |
 | `TEQUILASHOT_AUTO_DENOISE` | off | Clean every new recording automatically; `1` or `0` overrides the preference |

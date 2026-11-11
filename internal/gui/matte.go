@@ -35,12 +35,14 @@ type cutter struct {
 	onFail   func(error)
 	bg       image.Image // replaces the background when not nil
 	flipBg   bool
+	model    string // empty follows the environment
 }
 
-// newCutter starts the worker. onFrame and onFail run on the worker goroutine
-// and onFail is called at most once; no frame is delivered after it.
-func newCutter(bg image.Image, flipBg bool, onFrame func(*image.RGBA), onFail func(error)) *cutter {
-	c := &cutter{in: make(chan []byte, 1), done: make(chan struct{}), onFrame: onFrame, onFail: onFail, bg: bg, flipBg: flipBg}
+// newCutter starts the worker for the model named by model, or the one the
+// environment names when that is empty. onFrame and onFail run on the worker
+// goroutine and onFail is called at most once; no frame is delivered after it.
+func newCutter(model string, bg image.Image, flipBg bool, onFrame func(*image.RGBA), onFail func(error)) *cutter {
+	c := &cutter{in: make(chan []byte, 1), done: make(chan struct{}), onFrame: onFrame, onFail: onFail, bg: bg, flipBg: flipBg, model: model}
 	go c.run()
 	go c.watch()
 	return c
@@ -67,7 +69,7 @@ func (c *cutter) Put(frame []byte) {
 
 func (c *cutter) run() {
 	defer close(c.done)
-	m, err := segment.New()
+	m, err := segment.NewWithModel(c.model)
 	if err != nil {
 		c.fail(err)
 		return
