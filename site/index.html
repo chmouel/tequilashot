@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tequilashot: screenshots, recordings and instant replay for Sway and Hyprland</title>
+<meta name="description" content="Screenshots, GPU-accelerated screen recordings and instant replay for Sway and Hyprland, in GTK4 or from the command line.">
+<meta name="theme-color" content="#1d1915">
+<meta property="og:title" content="tequilashot">
+<meta property="og:description" content="Screenshots, GPU-accelerated recordings and instant replay for Sway and Hyprland.">
+<meta property="og:image" content="https://chmouel.github.io/tequilashot/img/social-preview.png">
+<link rel="icon" href="img/tequilashot-mark.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav><div class="wrap">
+  <a href="#top"><img src="img/tequilashot-mark-inverse.svg" alt="tequilashot"></a>
+  <span class="links" style="display:contents">
+    <a href="#features">Features</a>
+    <a href="#dialogue">Dialogue</a>
+    <a href="#replay">Replay</a>
+    <a href="#install">Install</a>
+    <a href="#cli">Command line</a>
+  </span>
+  <a class="gh" href="https://github.com/chmouel/tequilashot">GitHub</a>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <img class="logo" src="img/tequilashot-logo-inverse.svg" alt="tequilashot">
+  <h1>Screenshot and screen recorder tool for Wayland window managers.</h1>
+  <p class="lead">Screenshots, GPU-accelerated recordings and instant replay for Sway and Hyprland. Use the GTK4 dialogue or the command line.</p>
+  <div class="btns">
+    <a class="btn primary" href="#install">Install</a>
+    <a class="btn ghost" href="https://github.com/chmouel/tequilashot/releases">Download a release</a>
+  </div>
+  <img class="shot" src="img/social-preview.png" width="1280" height="640" alt="The tequilashot capture dialogue next to a desktop">
+</div></header>
+
+<section id="features"><div class="wrap">
+  <h2>What it does</h2>
+  <p class="sub">Run <code>tequilashot</code> with no arguments to open the dialogue. It starts the daemon if needed and remembers your last settings. Enter captures, Escape closes.</p>
+  <div class="grid">
+    <div class="card"><h3>GPU recording</h3><p>GPU Screen Recorder encodes video on the graphics card, so the CPU stays free and high resolutions keep their frame rate.</p></div>
+    <div class="card"><h3>Instant replay</h3><p>Keep the last 30, 60 or 120 seconds of a monitor in memory and save a clip after the fact.</p></div>
+    <div class="card"><h3>Daemon</h3><p>The daemon stays resident, so the dialogue opens straight away and each capture is a command you can bind to a key or a Waybar module.</p></div>
+    <div class="card"><h3>Round camera</h3><p>Your webcam in a draggable circle on screen, with optional background removal for the circle and the virtual camera.</p></div>
+    <div class="card"><h3>Virtual camera</h3><p>Publish a monitor, window or region as a webcam that Google Meet and Chrome can select.</p></div>
+    <div class="card"><h3>Trim and denoise</h3><p>Trim a recording, or save a copy with hiss, hum and keyboard noise taken out of the speech.</p></div>
+  </div>
+</div></section>
+
+<section id="dialogue"><div class="wrap">
+  <h2>The capture dialogue</h2>
+  <p class="sub">Pick Screenshot, Video, Replay or Camera, then a source. The dialogue hides before capturing.</p>
+
+  <div class="row">
+    <div class="txt">
+      <h3>Choose what to capture</h3>
+      <p>Monitor shows live thumbnails of each output. Window lists the open windows with their preview, application and size. Region lets you drag out an area after pressing Capture or Record.</p>
+      <p>The countdown is 0, 3, 5 or 10 seconds.</p>
+    </div>
+    <div class="pair">
+      <img class="shot" src="img/dialogue-screenshot.png" alt="Screenshot mode with monitor thumbnails and a countdown">
+      <img class="shot" src="img/dialogue-window.png" alt="Window list with a preview of each open window">
+    </div>
+  </div>
+
+  <div class="row flip">
+    <div class="txt">
+      <h3>Record with sound and camera</h3>
+      <p>Video mode adds desktop sound and a microphone, with a device picker for the microphone. The camera panel shows a live preview: place the camera on a corner, then choose its size, shape and mirroring.</p>
+      <p>Stop a recording by running <code>tequilashot</code> again, with <code>tequilashot stop-recording</code>, or by clicking the Waybar module.</p>
+    </div>
+    <img class="shot" src="img/dialogue-monitor.png" alt="Video mode with desktop sound, microphone and the camera panel open">
+  </div>
+
+  <div class="row">
+    <div class="txt">
+      <h3>Round camera</h3>
+      <p>The Circle shape puts the webcam on screen as a round bubble with a white ring, above other windows, and the recording captures it from there. Drag it around, or run <code>tequilashot camera cycle</code> to move it clockwise between corners.</p>
+      <p>Remove background shows only you in the circle, and your surroundings become transparent. A person-segmentation model runs on the CPU, at roughly six frames a second, so expect a lower frame rate.</p>
+    </div>
+    <img class="shot" src="img/dialogue-camera-circle.png" alt="Camera panel with the Circle shape selected and a round webcam in the preview">
+  </div>
+
+  <div class="row flip">
+    <div class="txt">
+      <h3>After the capture</h3>
+      <p>The result page previews the file with its size and duration. Play it, show it in its folder, copy its path, rename it or move it to the bin. Screenshots add Copy image and Edit, which opens <a href="https://github.com/gabm/satty">Satty</a>.</p>
+    </div>
+    <div class="pair">
+      <img class="shot" src="img/dialogue-result.png" alt="Recording saved page with playback, folder, rename and delete actions">
+      <img class="shot" src="img/dialogue-screenshot-result.png" alt="Screenshot saved page with copy, edit and open actions">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="txt">
+      <h3>Trim and denoise</h3>
+      <p>Drag the timeline handles or type exact times. Keep saves the selection; Cut removes it and joins the remaining footage. The short previews play the first moments of a kept selection, the last moments before its end, or the join left by a cut.</p>
+      <p>Remove noise uses FFmpeg's <code>arnndn</code> filter with an RNNoise speech model. The picture is copied as it is, so it is quick and costs no quality.</p>
+    </div>
+    <img class="shot" src="img/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles">
+  </div>
+</div></section>
+
+<section id="replay"><div class="wrap">
+  <h2>Instant replay</h2>
+  <p class="sub">Replay holds the previous 30, 60 or 120 seconds of a monitor in RAM, with optional desktop sound and microphone. Nothing is written to disk until you save, and you get whatever the buffer held at that moment, so save after the moment you wanted to keep.</p>
+  <pre><code># Buffer the focused monitor, including desktop sound
+tequilashot replay-start --current-screen --seconds 60 --audio
+# Save the buffer and print the clip's path
+tequilashot replay-save
+# Discard the remaining buffer
+tequilashot replay-stop</code></pre>
+  <p class="sub">At the default 20 Mbps H.264, footage takes about 2.5 MB per second, whatever the resolution or refresh rate.</p>
+  <table>
+    <tr><th>Buffer</th><th>Memory</th></tr>
+    <tr><td>30 seconds</td><td>about 75 MB</td></tr>
+    <tr><td>60 seconds (default)</td><td>about 150 MB</td></tr>
+    <tr><td>120 seconds</td><td>about 300 MB</td></tr>
+  </table>
+  <p class="sub">Replay needs a GPU Screen Recorder build with <code>-ipc</code> support. It captures monitors only, and buffering does not resume after the daemon restarts.</p>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <h2>Install</h2>
+  <h3>Prebuilt</h3>
+  <p class="sub"><a href="https://github.com/chmouel/tequilashot/releases">GitHub Releases</a> has an x86_64 archive plus deb and rpm packages. They need GTK 4 and libadwaita, and gtk4-layer-shell for the round camera.</p>
+  <pre><code># Arch Linux (AUR)
+yay -S tequilashot-bin</code></pre>
+  <h3>From source</h3>
+  <p class="sub">You need Go 1.25.6 or newer, a C toolchain, and the GTK 4 and libadwaita development files.</p>
+  <pre><code>go install github.com/chmouel/tequilashot/cmd/tequilashot@main
+
+# or a CLI-only build without GTK
+CGO_ENABLED=0 go build -tags nogui -o bin/tequilashot ./cmd/tequilashot</code></pre>
+  <h3>Runtime tools</h3>
+  <table>
+    <tr><th>Tool</th><th>Used for</th></tr>
+    <tr><td><a href="https://sr.ht/~emersion/grim/">grim</a></td><td>Capturing Wayland output</td></tr>
+    <tr><td><a href="https://github.com/emersion/slurp">slurp</a></td><td>Selecting a region</td></tr>
+    <tr><td><a href="https://git.dec05eba.com/gpu-screen-recorder/about/">gpu-screen-recorder</a></td><td>Video, audio and webcam input</td></tr>
+    <tr><td><a href="https://github.com/bugaevc/wl-clipboard">wl-clipboard</a></td><td>Clipboard commands</td></tr>
+    <tr><td><a href="https://ffmpeg.org/">FFmpeg</a></td><td>Camera previews, trimming and noise removal</td></tr>
+  </table>
+  <p class="sub">The recorder encodes on the GPU and does not fall back to the CPU, so hardware H.264 encoding has to work on the card the recorder selects. If a capture fails as soon as it starts, check that first.</p>
+</div></section>
+
+<section id="cli"><div class="wrap">
+  <h2>Command line</h2>
+  <p class="sub">Every command talks to the same daemon as the dialogue and starts it when needed.</p>
+<pre><code># Screenshots
+tequilashot selection-clipboard
+tequilashot selection-file
+tequilashot current-window-clipboard
+
+# Recordings
+tequilashot movie-screen --audio --mic
+tequilashot movie-current-window --camera
+tequilashot toggle-record -a movie-current-window -w 2
+tequilashot stop-recording
+
+# Virtual camera
+tequilashot virtual-camera start --camera
+
+# Noise removal
+tequilashot denoise recording.mp4</code></pre>
+
+  <h3>Key bindings</h3>
+<pre><code># Sway, ~/.config/sway/config
+bindsym $mod+r exec tequilashot
+bindsym Print exec tequilashot selection-clipboard
+bindsym $mod+Shift+r exec tequilashot toggle-record -a movie-screen -w 2
+
+-- Hyprland, hyprland.lua
+hl.bind("SUPER + R", hl.dsp.exec_cmd("tequilashot"))
+hl.bind("Print", hl.dsp.exec_cmd("tequilashot selection-clipboard"))</code></pre>
+
+  <h3>Waybar</h3>
+<pre><code>"custom/recording": {
+  "exec": "tequilashot waybar-status --follow",
+  "on-click": "tequilashot toggle-record -a movie-current-window",
+  "return-type": "json"
+}</code></pre>
+  <p class="sub">Completion for Bash, Zsh and Fish comes from <code>tequilashot completion &lt;shell&gt;</code>. The <a href="https://github.com/chmouel/tequilashot#readme">README</a> covers preferences, environment variables, replay modules and the virtual camera setup.</p>
+</div></section>
+
+<section class="author" aria-labelledby="author-title"><div class="wrap">
+  <div class="author-card">
+    <img class="avatar" src="img/chmouel.jpg" width="120" height="120" alt="Chmouel Boudjnah">
+    <div class="author-text">
+      <h2 id="author-title">Made by Chmouel</h2>
+      <p>I write tequilashot and keep it free and open source. If it earns a place in your desktop, you can follow the work on GitHub or sponsor it. Issues, patches and key bindings from your own Sway or Hyprland setup are welcome.</p>
+    </div>
+    <div class="author-actions">
+      <a class="btn sponsor" href="https://github.com/sponsors/chmouel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 7.8a4.2 4.2 0 0 1 7.5 2.7c0 5.4-7.5 10-7.5 10z"/></svg>Sponsor</a>
+      <a class="btn ghost" href="https://github.com/chmouel/tequilashot"><svg class="solid" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.4-.5-1.6.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.6.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
+    </div>
+  </div>
+  <p class="author-links">Also on <a href="https://fosstodon.org/@chmouel">the fediverse</a> and <a href="https://blog.chmouel.com">my blog</a>.</p>
+</div></section>
+
+<footer><div class="wrap">
+  <p>tequilashot is released under the <a href="https://github.com/chmouel/tequilashot/blob/main/LICENSE">Apache-2.0 licence</a>.</p>
+</div></footer>
+</body>
+</html>
