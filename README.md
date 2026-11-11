@@ -298,7 +298,7 @@ x86_64 archive, deb and rpm packages, all carrying the capture dialogue, a
 desktop launcher and the application icon. They need GTK 4 and libadwaita at
 run time, and gtk4-layer-shell for the round camera.
 
-Arch Linux users can install the same build from the AUR:
+Arch Linux/Omarchy users can install the same build from the AUR:
 
 ```sh
 yay -S tequilashot-bin
