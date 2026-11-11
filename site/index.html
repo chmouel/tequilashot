@@ -16,11 +16,11 @@
 <nav><div class="wrap">
   <a href="#top"><img src="img/tequilashot-mark-inverse.svg" alt="tequilashot"></a>
   <span class="links" style="display:contents">
-    <a href="#features">Features</a>
-    <a href="#dialogue">Dialogue</a>
+    <a href="#screenshots">Screenshots</a>
+    <a href="#recordings">Recordings</a>
     <a href="#replay">Replay</a>
+    <a href="#ai">AI &amp; models</a>
     <a href="#install">Install</a>
-    <a href="#cli">Command line</a>
   </span>
   <a class="gh" href="https://github.com/chmouel/tequilashot">GitHub</a>
 </div></nav>
@@ -40,41 +40,49 @@
   <h2>What it does</h2>
   <p class="sub">Run <code>tequilashot</code> with no arguments to open the dialogue. It starts the daemon if needed and remembers your last settings. Enter captures, Escape closes.</p>
   <div class="grid">
+    <div class="card"><h3>Screenshots</h3><p>A monitor, a window or a dragged-out region, to the clipboard or a file, with an optional AI-suggested file name.</p></div>
     <div class="card"><h3>GPU recording</h3><p>GPU Screen Recorder encodes video on the graphics card, so the CPU stays free and high resolutions keep their frame rate.</p></div>
     <div class="card"><h3>Instant replay</h3><p>Keep the last 30, 60 or 120 seconds of a monitor in memory and save a clip after the fact.</p></div>
-    <div class="card"><h3>Daemon</h3><p>The daemon stays resident, so the dialogue opens straight away and each capture is a command you can bind to a key or a Waybar module.</p></div>
     <div class="card"><h3>Round camera</h3><p>Your webcam in a draggable circle on screen, with optional background removal for the circle and the virtual camera.</p></div>
     <div class="card"><h3>Virtual camera</h3><p>Publish a monitor, window or region as a webcam that Google Meet and Chrome can select.</p></div>
     <div class="card"><h3>Trim and denoise</h3><p>Trim a recording, or save a copy with hiss, hum and keyboard noise taken out of the speech.</p></div>
   </div>
 </div></section>
 
-<section id="dialogue"><div class="wrap">
-  <h2>The capture dialogue</h2>
-  <p class="sub">Pick Screenshot, Video, Replay or Camera, then a source. The dialogue hides before capturing.</p>
+<section id="screenshots"><div class="wrap">
+  <h2>Screenshots</h2>
+  <p class="sub">Pick Screenshot in the dialogue, then a source: Monitor shows live thumbnails of each output, Window lists the open windows with their preview, application and size, and Region lets you drag out an area after pressing Capture. The countdown is 0, 3, 5 or 10 seconds, and the dialogue hides before capturing.</p>
+
+  <div class="pair">
+    <img class="shot" src="img/dialogue-screenshot.png" alt="Screenshot mode with monitor thumbnails and a countdown">
+    <img class="shot" src="img/dialogue-window.png" alt="Window list with a preview of each open window">
+  </div>
 
   <div class="row">
     <div class="txt">
-      <h3>Choose what to capture</h3>
-      <p>Monitor shows live thumbnails of each output. Window lists the open windows with their preview, application and size. Region lets you drag out an area after pressing Capture or Record.</p>
-      <p>The countdown is 0, 3, 5 or 10 seconds.</p>
+      <h3>After the capture</h3>
+      <p>The result page previews the screenshot with its dimensions and file size. Copy the image or its path, open it in its folder, rename it, or move it to the bin.</p>
+      <p>Edit opens <a href="https://github.com/gabm/satty">Satty</a> and reloads the preview when you save.</p>
     </div>
-    <div class="pair">
-      <img class="shot" src="img/dialogue-screenshot.png" alt="Screenshot mode with monitor thumbnails and a countdown">
-      <img class="shot" src="img/dialogue-window.png" alt="Window list with a preview of each open window">
-    </div>
+    <img class="shot" src="img/dialogue-screenshot-result.png" alt="Screenshot saved page with copy, edit and open actions">
   </div>
 
-  <div class="row flip">
+  <p class="sub">Clipboard captures open a name-entry window before saving. If <a href="https://github.com/sigoden/aichat">aichat</a> is installed, it suggests a name while you type; see <a href="#ai">AI and local models</a>.</p>
+</div></section>
+
+<section id="recordings"><div class="wrap">
+  <h2>Recordings</h2>
+  <p class="sub">Pick Video for a monitor, window or region. The dialogue hides during the recording; stop it by running <code>tequilashot</code> again, with <code>tequilashot stop-recording</code>, or by clicking the Waybar module.</p>
+
+  <div class="row">
     <div class="txt">
-      <h3>Record with sound and camera</h3>
-      <p>Video mode adds desktop sound and a microphone, with a device picker for the microphone. The camera panel shows a live preview: place the camera on a corner, then choose its size, shape and mirroring.</p>
-      <p>Stop a recording by running <code>tequilashot</code> again, with <code>tequilashot stop-recording</code>, or by clicking the Waybar module.</p>
+      <h3>Sound and camera</h3>
+      <p>Video mode adds desktop sound and a microphone, with a device picker for the microphone. The camera panel shows a live preview: place the camera on a corner, then choose its size, shape and mirroring. Monitor recordings can trim pixels from the top to hide a bar.</p>
     </div>
     <img class="shot" src="img/dialogue-monitor.png" alt="Video mode with desktop sound, microphone and the camera panel open">
   </div>
 
-  <div class="row">
+  <div class="row flip">
     <div class="txt">
       <h3>Round camera</h3>
       <p>The Circle shape puts the webcam on screen as a round bubble with a white ring, above other windows, and the recording captures it from there. Drag it around, or run <code>tequilashot camera cycle</code> to move it clockwise between corners.</p>
@@ -83,25 +91,29 @@
     <img class="shot" src="img/dialogue-camera-circle.png" alt="Camera panel with the Circle shape selected and a round webcam in the preview">
   </div>
 
-  <div class="row flip">
+  <div class="row">
     <div class="txt">
-      <h3>After the capture</h3>
-      <p>The result page previews the file with its size and duration. Play it, show it in its folder, copy its path, rename it or move it to the bin. Screenshots add Copy image and Edit, which opens <a href="https://github.com/gabm/satty">Satty</a>.</p>
+      <h3>After the recording</h3>
+      <p>The result page previews the video with its size, length and resolution. Play it, show it in its folder, copy its path, rename it or move it to the bin.</p>
     </div>
-    <div class="pair">
-      <img class="shot" src="img/dialogue-result.png" alt="Recording saved page with playback, folder, rename and delete actions">
-      <img class="shot" src="img/dialogue-screenshot-result.png" alt="Screenshot saved page with copy, edit and open actions">
-    </div>
+    <img class="shot" src="img/dialogue-result.png" alt="Recording saved page with playback, folder, rename and delete actions">
   </div>
 
-  <div class="row">
+  <div class="row flip">
     <div class="txt">
       <h3>Trim and denoise</h3>
       <p>Drag the timeline handles or type exact times. Keep saves the selection; Cut removes it and joins the remaining footage. The short previews play the first moments of a kept selection, the last moments before its end, or the join left by a cut.</p>
-      <p>Remove noise uses FFmpeg's <code>arnndn</code> filter with an RNNoise speech model. The picture is copied as it is, so it is quick and costs no quality.</p>
+      <p>Remove noise saves a copy with hiss, hum, fans and keyboard clatter taken out of the speech, using FFmpeg's <code>arnndn</code> filter and an RNNoise speech model. The picture and any other streams are copied as they are, so it is quick and costs no quality. The trimmer has a Remove noise toggle as well, which cleans the sound of the copy it saves.</p>
     </div>
     <img class="shot" src="img/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles">
   </div>
+
+<pre><code># Record the screen with desktop sound and the microphone
+tequilashot movie-screen --audio --mic
+# Record the focused window with the round camera
+tequilashot movie-current-window --camera --camera-shape circle
+# Save recording-denoised.mp4 beside the original
+tequilashot denoise recording.mp4</code></pre>
 </div></section>
 
 <section id="replay"><div class="wrap">
@@ -121,6 +133,21 @@ tequilashot replay-stop</code></pre>
     <tr><td>120 seconds</td><td>about 300 MB</td></tr>
   </table>
   <p class="sub">Replay needs a GPU Screen Recorder build with <code>-ipc</code> support. It captures monitors only, and buffering does not resume after the daemon restarts.</p>
+</div></section>
+
+<section id="ai"><div class="wrap">
+  <h2>AI and local models</h2>
+  <p class="sub">The AI features run on your machine or through your own <a href="https://github.com/sigoden/aichat">aichat</a> setup, and the models are downloaded once, on your click, with their checksum verified. Nothing is fetched behind your back.</p>
+
+  <div class="grid">
+    <div class="card"><h3>AI file names</h3><p>When a clipboard capture asks for a file name, tequilashot can send the picture to aichat and suggest one while you type. The model defaults to <code>gemini:gemini-2.5-flash-image</code> and follows whatever providers and keys you already configured in aichat. Turn it off and the plain name entry stays.</p></div>
+    <div class="card"><h3>Background removal</h3><p>The round camera's Remove background runs the <code>u2net_human_seg.onnx</code> person-segmentation model (Apache-2.0) on your CPU through ONNX Runtime. It works in recordings and in the virtual camera, and the Download button in the dialogue fetches the model once.</p></div>
+    <div class="card"><h3>Noise removal</h3><p>Remove noise uses an RNNoise speech model, about 300&nbsp;KB, with FFmpeg's <code>arnndn</code> filter. The first time, the dialogue offers the download; the checksum is verified before the model is used.</p></div>
+  </div>
+
+  <p class="sub">Models live in <code>~/.local/share/tequilashot/</code>, and Preferences or environment variables can point elsewhere: <code>TEQUILASHOT_AI_MODEL</code> for the naming model, <code>TEQUILASHOT_SEGMENTATION_MODEL</code> and <code>TEQUILASHOT_ONNXRUNTIME_LIB</code> for background removal, <code>TEQUILASHOT_DENOISE_MODEL</code> for noise removal. The Advanced preferences page also has a mirror setting for the segmentation model, restricted to <code>https://</code>.</p>
+
+  <p class="sub">If the ONNX Runtime library or the segmentation model is missing, the round camera is hidden and an error is reported rather than showing your real background. A recording or virtual camera that is already running carries on without it.</p>
 </div></section>
 
 <section id="install"><div class="wrap">
@@ -143,6 +170,7 @@ CGO_ENABLED=0 go build -tags nogui -o bin/tequilashot ./cmd/tequilashot</code></
     <tr><td><a href="https://git.dec05eba.com/gpu-screen-recorder/about/">gpu-screen-recorder</a></td><td>Video, audio and webcam input</td></tr>
     <tr><td><a href="https://github.com/bugaevc/wl-clipboard">wl-clipboard</a></td><td>Clipboard commands</td></tr>
     <tr><td><a href="https://ffmpeg.org/">FFmpeg</a></td><td>Camera previews, trimming and noise removal</td></tr>
+    <tr><td><a href="https://github.com/sigoden/aichat">aichat</a></td><td>AI-generated file names (optional)</td></tr>
   </table>
   <p class="sub">The recorder encodes on the GPU and does not fall back to the CPU, so hardware H.264 encoding has to work on the card the recorder selects. If a capture fails as soon as it starts, check that first.</p>
 </div></section>
