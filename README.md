@@ -8,6 +8,10 @@
 <p align="center">Blazing-fast screenshots, GPU-accelerated screen recordings and instant replay for Sway and Hyprland, in GTK4 or from the command line.</p>
 
 <p align="center">
+  <a href="https://chmouel.github.io/tequilashot/">🌐 <strong>chmouel.github.io/tequilashot</strong></a>
+</p>
+
+<p align="center">
   <img src=".github/screenshots/social-preview.png" alt="Tequilashot: screenshots, GPU-accelerated recordings and instant replay, with the capture dialogue">
 </p>
 
