@@ -11,11 +11,12 @@ import (
 	_ "image/jpeg" // registers the JPEG decoder for LoadBackground
 	_ "image/png"  // registers the PNG decoder for LoadBackground
 	"os"
+	"path/filepath"
 )
 
 // LoadBackground decodes a PNG or JPEG file for use with SetBackground.
 func LoadBackground(path string) (image.Image, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path)) //nolint:gosec // the user chose this picture
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the camera background: %w", err)
 	}
@@ -106,7 +107,7 @@ func coverScale(src *image.RGBA, w, h int) *image.RGBA {
 				continue
 			}
 			o := out.PixOffset(x, y)
-			out.Pix[o], out.Pix[o+1], out.Pix[o+2], out.Pix[o+3] = byte(r/n), byte(g/n), byte(b/n), 255
+			out.Pix[o], out.Pix[o+1], out.Pix[o+2], out.Pix[o+3] = byte(r/n), byte(g/n), byte(b/n), 255 //nolint:gosec // averages of bytes stay within 0..255
 		}
 	}
 	return out
