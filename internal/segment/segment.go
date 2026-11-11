@@ -12,12 +12,8 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"sync"
-	"sync/atomic"
 
+	"github.com/chmouel/tequilashot/internal/onnx"
 	"github.com/chmouel/tequilashot/internal/prefs"
 
 	ort "github.com/yalue/onnxruntime_go"
@@ -27,10 +23,7 @@ const (
 	// ModelEnv names the model file, overriding the default location.
 	ModelEnv = prefs.EnvSegmentationModel
 	// LibraryEnv names the ONNX Runtime shared library to load.
-	LibraryEnv = prefs.EnvOnnxRuntimeLib
-
-	// minRuntime is the oldest ONNX Runtime providing the API the binding uses.
-	minRuntime = "1.29"
+	LibraryEnv = onnx.LibraryEnv
 
 	side = 320
 
@@ -42,20 +35,6 @@ const (
 var (
 	mean = [3]float32{0.485, 0.456, 0.406}
 	std  = [3]float32{0.229, 0.224, 0.225}
-
-	libraryCandidates = []string{
-		"/usr/lib/libonnxruntime.so",
-		"/usr/lib64/libonnxruntime.so",
-		"/usr/lib/x86_64-linux-gnu/libonnxruntime.so",
-		"/usr/lib/aarch64-linux-gnu/libonnxruntime.so",
-		"/usr/local/lib/libonnxruntime.so",
-	}
-
-	versionRe = regexp.MustCompile(`\d+\.\d+(\.\d+)?$`)
-
-	envOnce sync.Once
-	envErr  error
-	loaded  atomic.Value
 )
 
 // ModelPath returns the model file to load. Nothing is downloaded: the file
@@ -70,61 +49,9 @@ func DefaultModelPath() string {
 	return prefs.DefaultSegmentationModelPath()
 }
 
-func libraryPath() (string, error) {
-	if p := os.Getenv(LibraryEnv); p != "" {
-		return p, nil
-	}
-	if p := prefs.Current().OnnxRuntimeLib; p != "" {
-		return p, nil
-	}
-	for _, p := range libraryCandidates {
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
-		}
-	}
-	return "", fmt.Errorf("ONNX Runtime library not found; install it or set %s", LibraryEnv)
-}
-
 // LoadedLibrary returns the ONNX Runtime library this process has loaded, or
 // an empty string. A different library takes effect only in a new process.
-func LoadedLibrary() string {
-	lib, _ := loaded.Load().(string)
-	return lib
-}
-
-func initRuntime() error {
-	envOnce.Do(func() {
-		lib, err := libraryPath()
-		if err != nil {
-			envErr = err
-			return
-		}
-		ort.SetSharedLibraryPath(lib)
-		if err := ort.InitializeEnvironment(); err != nil {
-			envErr = startError(lib, err)
-			return
-		}
-		loaded.Store(lib)
-	})
-	return envErr
-}
-
-// startError explains a failed start. The binding is built against a fixed
-// ONNX Runtime API; a library that predates it cannot provide that API.
-func startError(lib string, err error) error {
-	if !strings.Contains(err.Error(), "ORT API base") {
-		return fmt.Errorf("failed to start ONNX Runtime from %s: %w", lib, err)
-	}
-	found := lib
-	if resolved, rerr := filepath.EvalSymlinks(lib); rerr == nil {
-		found = resolved
-	}
-	have := "an older version"
-	if m := versionRe.FindString(filepath.Base(found)); m != "" {
-		have = m
-	}
-	return fmt.Errorf("%s (%s) is too old: this build needs ONNX Runtime %s or newer; upgrade it or set %s", found, have, minRuntime, LibraryEnv)
-}
+func LoadedLibrary() string { return onnx.LoadedLibrary() }
 
 // Matter turns camera frames into frames whose background is transparent. It
 // is not safe for concurrent use.
@@ -140,7 +67,7 @@ func New() (*Matter, error) {
 	if _, err := os.Stat(model); err != nil {
 		return nil, fmt.Errorf("segmentation model not found at %s (set %s to use another file)", model, ModelEnv)
 	}
-	if err := initRuntime(); err != nil {
+	if err := onnx.Init(); err != nil {
 		return nil, err
 	}
 	input, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, side, side))

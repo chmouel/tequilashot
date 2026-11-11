@@ -17,7 +17,7 @@ import (
 func denoiseCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "denoise",
-		Usage:     "Remove background noise from a recording's sound, saving a copy beside it",
+		Usage:     "Remove background noise and keyboard clicks from a recording's sound, saving a copy beside it",
 		ArgsUsage: "FILE",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "Save the copy at this path instead of FILE-denoised"},

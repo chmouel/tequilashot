@@ -1,9 +1,7 @@
 package denoise
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"math"
 	"os"
@@ -13,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
 func needTools(t *testing.T) {
@@ -38,55 +34,18 @@ func ffmpeg(t *testing.T, args ...string) {
 	}
 }
 
-// installedModel returns a usable model, or skips: tests never download it.
-func installedModel(t *testing.T) string {
+// needModel skips unless noise removal can run: tests never download the
+// model, which TEQUILASHOT_DENOISE_MODEL can point at.
+func needModel(t *testing.T) {
 	t.Helper()
-	model := prefs.DefaultDenoiseModelPath()
-	if _, err := os.Stat(model); err != nil {
-		t.Skip("no noise-removal model at " + model)
-	}
-	return model
-}
-
-func TestFilterSurvivesAwkwardPaths(t *testing.T) {
-	needTools(t)
-	data, err := os.ReadFile(installedModel(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	const awkward = `a:b,c'd [x];e\f=g.rnnn`
-	model := filepath.Join(t.TempDir(), awkward)
-	if err := os.WriteFile(model, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for _, args := range [][]string{
-		{"-af", Filter(model)},
-		{"-filter_complex", "[0:a]" + Filter(model) + "[out]", "-map", "[out]"},
-	} {
-		ffmpeg(t, append(append([]string{"-f", "lavfi", "-i", "sine=duration=0.2"}, args...), "-f", "null", "-")...)
-	}
-}
-
-// arnndn's NaN tail is random, so several runs are needed to catch it.
-func TestFilterEndsWithoutNaN(t *testing.T) {
-	needTools(t)
-	model := installedModel(t)
-	for range 6 {
-		cmd := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-f", "lavfi", "-i", "anoisesrc=d=1.2037:r=44100", //nolint:gosec
-			"-af", Filter(model)+",astats=measure_perchannel=none:measure_overall=Number_of_NaNs", "-f", "null", "-")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("ffmpeg: %v: %s", err, out)
-		}
-		if !strings.Contains(string(out), "Number of NaNs: 0.000000") {
-			t.Fatalf("filter produced NaN samples:\n%s", out)
-		}
+	if err := Ready(context.Background()); err != nil {
+		t.Skip(err.Error())
 	}
 }
 
 func TestExportKeepsOtherStreams(t *testing.T) {
 	needTools(t)
-	t.Setenv(prefs.EnvDenoiseModel, installedModel(t))
+	needModel(t)
 	dir := t.TempDir()
 	subs := filepath.Join(dir, "subs.srt")
 	if err := os.WriteFile(subs, []byte("1\n00:00:00,000 --> 00:00:01,000\nhello\n"), 0o600); err != nil {
@@ -123,15 +82,8 @@ func TestExportKeepsOtherStreams(t *testing.T) {
 
 func TestExportRefusesSilentRecording(t *testing.T) {
 	needTools(t)
+	needModel(t)
 	dir := t.TempDir()
-	model := filepath.Join(dir, "model.rnnn")
-	if err := os.WriteFile(model, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(prefs.EnvDenoiseModel, model)
-	if err := Ready(context.Background()); err != nil {
-		t.Skip(err.Error())
-	}
 	video := filepath.Join(dir, "silent.mp4")
 	ffmpeg(t, "-f", "lavfi", "-i", "color=red:s=64x64:r=10:d=1", "-c:v", "libx264", video)
 	if _, err := Export(context.Background(), video, "", nil); !errors.Is(err, ErrNoAudio) {
@@ -141,7 +93,7 @@ func TestExportRefusesSilentRecording(t *testing.T) {
 
 func TestExportKeepsPictureAndOriginal(t *testing.T) {
 	needTools(t)
-	t.Setenv(prefs.EnvDenoiseModel, installedModel(t))
+	needModel(t)
 	dir := t.TempDir()
 	source := filepath.Join(dir, "clip.mp4")
 	ffmpeg(t, "-f", "lavfi", "-i", "testsrc2=s=160x96:r=10:d=2", "-f", "lavfi", "-i", "anoisesrc=d=2:a=0.2",
@@ -181,153 +133,9 @@ func TestExportKeepsPictureAndOriginal(t *testing.T) {
 	}
 }
 
-const testRate = 48000
-
-var testClickTimes = []float64{2.0, 2.75, 3.5, 4.25, 5.0}
-
-// testSpeech is a harmonic stack with syllabic amplitude modulation, peaking
-// at 0.5.
-func testSpeech() []float64 {
-	out := make([]float64, 6*testRate)
-	peak := 0.0
-	for i := range out {
-		t := float64(i) / testRate
-		var v float64
-		for k := 1; k <= 8; k++ {
-			v += math.Sin(2*math.Pi*float64(k)*(140*t+0.3*math.Sin(2*math.Pi*0.7*t))) / float64(k)
-		}
-		out[i] = v * (0.5 + 0.5*math.Pow(math.Sin(2*math.Pi*2.7*t), 2))
-		peak = math.Max(peak, math.Abs(out[i]))
-	}
-	for i := range out {
-		out[i] *= 0.5 / peak
-	}
-	return out
-}
-
-func withKeyboardClicks(speech []float64) []float64 {
-	out := append([]float64(nil), speech...)
-	seed := uint64(12345)
-	const length = testRate * 6 / 1000
-	for _, at := range testClickTimes {
-		start := int(at * testRate)
-		for i := range length {
-			seed = (1103515245*seed + 12345) % (1 << 31)
-			noise := float64(seed)/float64(uint64(1)<<31)*2 - 1
-			out[start+i] += 0.6 * math.Exp(-float64(i)/(0.0015*testRate)) * noise
-		}
-	}
-	return out
-}
-
-// renderChain runs samples through af, exchanging raw 48 kHz mono samples so
-// the tests need no container.
-func renderChain(t *testing.T, af string, samples []float64) []float64 {
-	t.Helper()
-	raw := make([]byte, 4*len(samples))
-	for i, s := range samples {
-		binary.LittleEndian.PutUint32(raw[4*i:], math.Float32bits(float32(s)))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), ffmpegTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-v", "error", "-f", "f32le", //nolint:gosec
-		"-ar", strconv.Itoa(testRate), "-ac", "1", "-i", "pipe:0", "-af", af, "-f", "f32le", "pipe:1")
-	cmd.Stdin = bytes.NewReader(raw)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("ffmpeg: %v: %s", err, stderr.String())
-	}
-	if len(out)%4 != 0 {
-		t.Fatalf("ffmpeg returned %d bytes, not whole samples", len(out))
-	}
-	got := make([]float64, len(out)/4)
-	for i := range got {
-		got[i] = float64(math.Float32frombits(binary.LittleEndian.Uint32(out[4*i:])))
-		if math.IsNaN(got[i]) {
-			t.Fatalf("filter produced a NaN sample at %d", i)
-		}
-	}
-	return got
-}
-
-// clickResidual measures what survives of a burst: the difference between the
-// same signal with and without its clicks, around one click time.
-func clickResidual(noisy, clean []float64, at float64) float64 {
-	start := int(at*testRate) - testRate/100
-	end := start + 3*testRate/100
-	var sum float64
-	for i := start; i < end; i++ {
-		sum += (noisy[i] - clean[i]) * (noisy[i] - clean[i])
-	}
-	return math.Sqrt(sum / float64(end-start))
-}
-
-func TestFilterAttenuatesKeyboardClicks(t *testing.T) {
-	needTools(t)
-	model := installedModel(t)
-	speech := testSpeech()
-	clicky := withKeyboardClicks(speech)
-	arnndnOnly := strings.TrimSuffix(Filter(model), ","+clickFilter)
-
-	cleanOut := renderChain(t, Filter(model), speech)
-	clickyOut := renderChain(t, Filter(model), clicky)
-	cleanBase := renderChain(t, arnndnOnly, speech)
-	clickyBase := renderChain(t, arnndnOnly, clicky)
-	if len(clickyOut) != len(clicky) {
-		t.Fatalf("filtered sound is %d samples, want the %d it was given", len(clickyOut), len(clicky))
-	}
-
-	var withFilter, withoutFilter float64
-	for _, at := range testClickTimes {
-		withFilter += clickResidual(clickyOut, cleanOut, at)
-		withoutFilter += clickResidual(clickyBase, cleanBase, at)
-	}
-	if withFilter >= 0.8*withoutFilter {
-		t.Fatalf("clicks left %0.5f of residual against %0.5f for arnndn alone, want a fifth less", withFilter, withoutFilter)
-	}
-}
-
-func TestFilterPreservesCleanSpeech(t *testing.T) {
-	needTools(t)
-	model := installedModel(t)
-	speech := testSpeech()
-	arnndnOnly := strings.TrimSuffix(Filter(model), ","+clickFilter)
-
-	before := renderChain(t, arnndnOnly, speech)
-	after := renderChain(t, Filter(model), speech)
-	if len(after) != len(before) {
-		t.Fatalf("filtered sound is %d samples, want the %d arnndn alone gives", len(after), len(before))
-	}
-	var diff, ref float64
-	for i := range after {
-		diff += (after[i] - before[i]) * (after[i] - before[i])
-		ref += before[i] * before[i]
-	}
-	if rel := math.Sqrt(diff / ref); rel > 0.1 {
-		t.Fatalf("click removal moved the clean sound by %0.3f of its level, want under 0.1", rel)
-	}
-}
-
-func TestFilterWithClickReducerRunsInBothGraphs(t *testing.T) {
-	needTools(t)
-	model := installedModel(t)
-	p := prefs.Current().Clone()
-	p.ReduceClicks = true
-	prefs.Set(p)
-	t.Cleanup(func() { prefs.Set(prefs.Default()) })
-	for _, args := range [][]string{
-		{"-af", Filter(model)},
-		{"-filter_complex", "[0:a]" + Filter(model) + "[out]", "-map", "[out]"},
-	} {
-		ffmpeg(t, append(append([]string{"-f", "lavfi", "-i", "sine=duration=0.5"}, args...), "-f", "null", "-")...)
-	}
-}
-
 func TestExportHandlesReadOnlySource(t *testing.T) {
 	needTools(t)
-	t.Setenv(prefs.EnvDenoiseModel, installedModel(t))
+	needModel(t)
 	source := filepath.Join(t.TempDir(), "clip.mp4")
 	ffmpeg(t, "-f", "lavfi", "-i", "testsrc2=s=160x96:r=10:d=1", "-f", "lavfi", "-i", "anoisesrc=d=1:a=0.2",
 		"-c:v", "libx264", "-c:a", "aac", "-t", "1", source)
@@ -340,5 +148,44 @@ func TestExportHandlesReadOnlySource(t *testing.T) {
 	}
 	if st, err := os.Stat(out); err != nil || st.Mode().Perm() != 0o444 {
 		t.Fatalf("output %s: %v, %v; want mode 0444", out, st, err)
+	}
+}
+
+func TestExportKeepsSoundTimingAndFlags(t *testing.T) {
+	needTools(t)
+	needModel(t)
+	source := filepath.Join(t.TempDir(), "clip.mp4")
+	ffmpeg(t, "-f", "lavfi", "-i", "testsrc2=s=160x96:r=10:d=2", "-itsoffset", "0.3", "-f", "lavfi", "-i", "anoisesrc=d=1.5:a=0.2",
+		"-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-c:a", "aac",
+		"-metadata:s:a:0", "language=fra", "-disposition:a:0", "default+visual_impaired", source)
+
+	out, err := Export(context.Background(), source, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	describe := func(file string) (float64, string) {
+		t.Helper()
+		got, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "a:0", //nolint:gosec
+			"-show_entries", "stream=start_time:stream_disposition=visual_impaired:stream_tags=language",
+			"-of", "default=nw=1", file).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var start float64
+		for line := range strings.Lines(string(got)) {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "start_time="); ok {
+				start, _ = strconv.ParseFloat(v, 64)
+			}
+		}
+		return start, string(got)
+	}
+	wantStart, _ := describe(source)
+	start, flags := describe(out)
+	// Encoding again adds one AAC priming frame ahead of the same sound.
+	if math.Abs(start-wantStart) > 0.03 || wantStart < 0.25 {
+		t.Fatalf("sound starts at %.3fs, want %.3fs as in the source", start, wantStart)
+	}
+	if !strings.Contains(flags, "DISPOSITION:visual_impaired=1") || !strings.Contains(flags, "TAG:language=fra") {
+		t.Fatalf("sound track = %q, want its language and visual_impaired flag kept", flags)
 	}
 }

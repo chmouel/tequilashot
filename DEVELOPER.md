@@ -46,6 +46,15 @@ should read `prefs.Current()` once per operation and keep that snapshot for
 its lifetime. Run helper programs through `prefs.Bin(name)` so a configured
 location is honoured.
 
+`internal/onnx` loads ONNX Runtime once for both `internal/segment` and
+`internal/denoise`; anything importing it needs cgo and so stays out of the
+`nogui` build, where noise removal reports that it is unavailable.
+`internal/denoise` decodes the sound with FFmpeg, turns down the keyboard
+clicks, runs DeepFilterNet3 a segment at a time and pipes the result back into
+FFmpeg. The click times come from `internal/keylog`, which the daemon starts
+whilst the microphone is recorded and which keeps only key times, in a small
+file per recording under `~/.local/state/tequilashot/keytimes`.
+
 ## Screenshots
 
 `make screenshots` rebuilds the dialogue and social-preview images in

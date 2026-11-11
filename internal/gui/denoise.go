@@ -50,7 +50,7 @@ func (a *app) offerDenoiseModel(ticket denoiseTicket) {
 		return
 	}
 	dlg := adw.NewAlertDialog("Download the noise-removal model?",
-		"Removing noise needs a small speech model, a one-off download of about 300 KB to "+denoise.ModelPath()+".")
+		"Removing noise needs a speech model, a one-off download of about 9 MB to "+denoise.ModelPath()+".")
 	dlg.AddResponse("cancel", "Cancel")
 	dlg.AddResponse("download", "Download")
 	dlg.SetResponseAppearance("download", adw.ResponseSuggested)

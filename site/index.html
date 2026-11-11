@@ -103,7 +103,7 @@
     <div class="txt">
       <h3>Trim and denoise</h3>
       <p>Drag the timeline handles or type exact times. Keep saves the selection; Cut removes it and joins the remaining footage. The short previews play the first moments of a kept selection, the last moments before its end, or the join left by a cut.</p>
-      <p>Remove noise saves a copy with hiss, hum, fans and keyboard clatter taken out of the speech, using FFmpeg's <code>arnndn</code> filter and an RNNoise speech model. The picture and any other streams are copied as they are, so it is quick and costs no quality. The trimmer has a Remove noise toggle as well, which cleans the sound of the copy it saves.</p>
+      <p>Remove noise saves a copy with hiss, hum, fans and keyboard clatter taken out of the speech, using the DeepFilterNet3 speech model and the key times noted whilst you recorded. The picture and any other streams are copied as they are, so it is quick and costs no quality. The trimmer has a Remove noise toggle as well, which cleans the sound of the copy it saves.</p>
     </div>
     <img class="shot" src="img/dialogue-trim.png" alt="Trim editor with the transport deck, film-strip timeline and selection handles">
   </div>
@@ -142,7 +142,7 @@ tequilashot replay-stop</code></pre>
   <div class="grid">
     <div class="card"><h3>AI file names</h3><p>When a clipboard capture asks for a file name, tequilashot can send the picture to aichat and suggest one while you type. The model defaults to <code>gemini:gemini-2.5-flash-image</code> and follows whatever providers and keys you already configured in aichat. Turn it off and the plain name entry stays.</p></div>
     <div class="card"><h3>Background removal</h3><p>The round camera's Remove background runs the <a href="https://github.com/danielgatis/rembg/releases/tag/v0.0.0"><code>u2net_human_seg.onnx</code></a> person-segmentation model (Apache-2.0) on your CPU through <a href="https://onnxruntime.ai/">ONNX Runtime</a>. It works in recordings and in the virtual camera, and the Download button in the dialogue fetches the model once.</p></div>
-    <div class="card"><h3>Noise removal</h3><p>Remove noise uses an <a href="https://jmvalin.ca/demo/rnnoise/">RNNoise</a> speech model from <a href="https://github.com/GregorR/rnnoise-models">rnnoise-models</a>, about 300&nbsp;KB, with FFmpeg's <code>arnndn</code> filter. The first time, the dialogue offers the download; the checksum is verified before the model is used.</p></div>
+    <div class="card"><h3>Noise removal</h3><p>Remove noise runs the <a href="https://github.com/Rikorose/DeepFilterNet">DeepFilterNet3</a> speech model (MIT and Apache-2.0), about 9&nbsp;MB, on your CPU through ONNX Runtime. Whilst the microphone records, tequilashot notes when keys go down and up, never which ones, so that each keyboard click can be found in the sound and turned down. The first time, the dialogue offers the download; the checksum is verified before the model is used.</p></div>
   </div>
 
   <p class="sub">Models live in <code>~/.local/share/tequilashot/</code>, and Preferences or environment variables can point elsewhere: <code>TEQUILASHOT_AI_MODEL</code> for the naming model, <code>TEQUILASHOT_SEGMENTATION_MODEL</code> and <code>TEQUILASHOT_ONNXRUNTIME_LIB</code> for background removal, <code>TEQUILASHOT_DENOISE_MODEL</code> for noise removal. The Advanced preferences page also has a mirror setting for the segmentation model, restricted to <code>https://</code>.</p>

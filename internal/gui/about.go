@@ -116,7 +116,7 @@ func newAboutDialog() *adw.AboutDialog {
 		"slurp https://github.com/emersion/slurp",
 		"GPU Screen Recorder https://git.dec05eba.com/gpu-screen-recorder/about/",
 		"FFmpeg https://ffmpeg.org/",
-		"RNNoise https://jmvalin.ca/demo/rnnoise/",
+		"DeepFilterNet https://github.com/Rikorose/DeepFilterNet",
 		"wl-clipboard https://github.com/bugaevc/wl-clipboard",
 	})
 	dlg.AddCreditSection("The drawing room", []string{

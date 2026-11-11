@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chmouel/tequilashot/internal/prefs"
+	"github.com/chmouel/tequilashot/internal/denoise"
 )
 
 func TestTrimSelection(t *testing.T) {
@@ -95,7 +95,7 @@ func TestExportTrim(t *testing.T) {
 				input = filepath.Join(dir, "silent.mp4")
 				trimTestCommand(t, "-i", source, "-an", "-c:v", "copy", input)
 			}
-			path, info, err := exportTrim(ctx, input, "", trimSelection{tc.start, tc.end, 4 * time.Second, tc.remove}, nil)
+			path, info, err := exportTrim(ctx, input, false, trimSelection{tc.start, tc.end, 4 * time.Second, tc.remove}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -136,7 +136,7 @@ func TestExportTrim(t *testing.T) {
 		}
 		cancelCtx, stop := context.WithCancel(ctx)
 		defer stop()
-		_, _, err = exportTrim(cancelCtx, source, "", trimSelection{0, 4 * time.Second, 4 * time.Second, false}, func(float64) { stop() })
+		_, _, err = exportTrim(cancelCtx, source, false, trimSelection{0, 4 * time.Second, 4 * time.Second, false}, func(float64) { stop() })
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("expected cancellation, got %v", err)
 		}
@@ -168,7 +168,7 @@ func TestTrimPreservesAudioDelay(t *testing.T) {
 		"-itsoffset", "0.3", "-f", "lavfi", "-i", "sine=frequency=440:duration=1.7", "-c:v", "libx264", "-c:a", "aac", source)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	path, _, err := exportTrim(ctx, source, "", trimSelection{0, time.Second, 2 * time.Second, false}, nil)
+	path, _, err := exportTrim(ctx, source, false, trimSelection{0, time.Second, 2 * time.Second, false}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestExportTrimSnapsToFrames(t *testing.T) {
 		"-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:v", "libx264", "-g", "80", "-c:a", "aac", source)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	path, _, err := exportTrim(ctx, source, "", trimSelection{375 * time.Millisecond, 850 * time.Millisecond, 4 * time.Second, false}, nil)
+	path, _, err := exportTrim(ctx, source, false, trimSelection{375 * time.Millisecond, 850 * time.Millisecond, 4 * time.Second, false}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestExportTrimSparseFrameDuration(t *testing.T) {
 	if snappedEnd == 0 {
 		t.Fatal("the sparse fixture has no gap to trim across")
 	}
-	path, _, err := exportTrim(ctx, source, "", trimSelection{start, requestedEnd, info.Duration, false}, nil)
+	path, _, err := exportTrim(ctx, source, false, trimSelection{start, requestedEnd, info.Duration, false}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestExportTrimDelayedPicture(t *testing.T) {
 		"-map", "1:v", "-map", "0:a", "-c:v", "libx264", "-g", "80", "-c:a", "aac", source)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	path, _, err := exportTrim(ctx, source, "", trimSelection{0, 2 * time.Second, 4 * time.Second, false}, nil)
+	path, _, err := exportTrim(ctx, source, false, trimSelection{0, 2 * time.Second, 4 * time.Second, false}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestExportTrimDelayedPicture(t *testing.T) {
 
 	// Cutting a middle section keeps a prefix whose own start is implicit, and
 	// that prefix must be held together just as the selection is.
-	path, _, err = exportTrim(ctx, source, "", trimSelection{time.Second, 2 * time.Second, 4 * time.Second, true}, nil)
+	path, _, err = exportTrim(ctx, source, false, trimSelection{time.Second, 2 * time.Second, 4 * time.Second, true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +365,7 @@ func TestExportTrimDelayedPicture(t *testing.T) {
 
 	// Removing everything the picture covers leaves only the tail, as the
 	// retained beginning holds no frame at all.
-	path, _, err = exportTrim(ctx, source, "", trimSelection{100 * time.Millisecond, 2 * time.Second, 4 * time.Second, true}, nil)
+	path, _, err = exportTrim(ctx, source, false, trimSelection{100 * time.Millisecond, 2 * time.Second, 4 * time.Second, true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +392,7 @@ func TestExportTrimCollapsedToFrame(t *testing.T) {
 	defer cancel()
 	for _, remove := range []bool{false, true} {
 		selection := trimSelection{375 * time.Millisecond, 390 * time.Millisecond, 4 * time.Second, remove}
-		if _, _, err := exportTrim(ctx, source, "", selection, nil); err == nil {
+		if _, _, err := exportTrim(ctx, source, false, selection, nil); err == nil {
 			t.Fatalf("remove=%v: a selection shorter than a frame was exported", remove)
 		}
 	}
@@ -404,9 +404,8 @@ func TestExportTrimRemovesNoise(t *testing.T) {
 			t.Skip(tool + " is not installed")
 		}
 	}
-	model := prefs.DefaultDenoiseModelPath()
-	if _, err := os.Stat(model); err != nil {
-		t.Skip("no noise-removal model at " + model)
+	if err := denoise.Ready(context.Background()); err != nil {
+		t.Skip(err.Error())
 	}
 	dir := t.TempDir()
 	source := filepath.Join(dir, "noisy.mp4")
@@ -415,7 +414,7 @@ func TestExportTrimRemovesNoise(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	path, _, err := exportTrim(ctx, source, model, trimSelection{time.Second, 2 * time.Second, 4 * time.Second, true}, nil)
+	path, _, err := exportTrim(ctx, source, true, trimSelection{time.Second, 2 * time.Second, 4 * time.Second, true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +429,7 @@ func TestExportTrimRemovesNoise(t *testing.T) {
 		t.Fatalf("mean volume %.1f dB after cleaning, %.1f dB before; the noise was not removed", after, before)
 	}
 
-	path, _, err = exportTrim(ctx, source, model, trimSelection{0, 4 * time.Second, 4 * time.Second, false}, nil)
+	path, _, err = exportTrim(ctx, source, true, trimSelection{0, 4 * time.Second, 4 * time.Second, false}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,4 +454,14 @@ func trimMeanVolume(t *testing.T, file string) float64 {
 		t.Fatal(err)
 	}
 	return v
+}
+
+func TestTrimKeysFollowTheKeptSegments(t *testing.T) {
+	s := time.Second
+	keys := []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond, 2500 * time.Millisecond, 3500 * time.Millisecond}
+	got := trimKeys(keys, []trimSegment{{0, s}, {3 * s, 4 * s}})
+	want := []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
+	if !slices.Equal(got, want) {
+		t.Fatalf("keys = %v, want %v", got, want)
+	}
 }

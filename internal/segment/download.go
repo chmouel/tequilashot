@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/chmouel/tequilashot/internal/fetch"
+	"github.com/chmouel/tequilashot/internal/onnx"
 	"github.com/chmouel/tequilashot/internal/prefs"
 )
 
@@ -44,7 +45,7 @@ func ModelInstalled() bool {
 // RuntimeAvailable returns an error when ONNX Runtime cannot be found. The
 // library comes from the system and is not downloaded.
 func RuntimeAvailable() error {
-	_, err := libraryPath()
+	_, err := onnx.LibraryPath()
 	return err
 }
 

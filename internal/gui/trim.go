@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chmouel/tequilashot/internal/denoise"
+	"github.com/chmouel/tequilashot/internal/keylog"
 	"github.com/chmouel/tequilashot/internal/prefs"
 
 	"golang.org/x/sys/unix"
@@ -107,9 +108,8 @@ func snapTrimSegments(ctx context.Context, source string, clock *frameClock, seg
 	return kept, nil
 }
 
-// trimFilters joins the kept segments; a non-empty audioFilter is applied to
-// the joined sound.
-func trimFilters(segments []trimSegment, audio bool, audioFilter string) string {
+// trimFilters joins the kept segments.
+func trimFilters(segments []trimSegment, audio bool) string {
 	var filters, inputs []string
 	for i, segment := range segments {
 		span := "start=" + trimSeconds(segment.start) + ":end=" + trimSeconds(segment.end)
@@ -126,16 +126,9 @@ func trimFilters(segments []trimSegment, audio bool, audioFilter string) string 
 	outputs := "[video]"
 	if audio {
 		a = 1
-		if audioFilter != "" {
-			outputs += "[joined]"
-		} else {
-			outputs += "[audio]"
-		}
+		outputs += "[audio]"
 	}
 	filters = append(filters, fmt.Sprintf("%sconcat=n=%d:v=1:a=%d%s", strings.Join(inputs, ""), len(segments), a, outputs))
-	if audio && audioFilter != "" {
-		filters = append(filters, "[joined]"+audioFilter+"[audio]")
-	}
 	return strings.Join(filters, ";")
 }
 
@@ -157,14 +150,14 @@ func trimHasAudio(ctx context.Context, file string) (bool, error) {
 	return len(probe.Streams) > 0, nil
 }
 
-// exportTrim saves the selection beside source. A non-empty denoiseModel also
-// removes background noise from the sound with that model.
-func exportTrim(ctx context.Context, source, denoiseModel string, selection trimSelection, progress func(float64)) (string, MediaInfo, error) {
+// exportTrim saves the selection beside source, with background noise removed
+// from the sound when removeNoise is set.
+func exportTrim(ctx context.Context, source string, removeNoise bool, selection trimSelection, progress func(float64)) (string, MediaInfo, error) {
 	if _, err := selection.segments(); err != nil {
 		return "", MediaInfo{}, err
 	}
 	suffix := "-trimmed"
-	if denoiseModel != "" {
+	if removeNoise {
 		if err := denoise.Ready(ctx); err != nil {
 			return "", MediaInfo{}, err
 		}
@@ -192,12 +185,8 @@ func exportTrim(ctx context.Context, source, denoiseModel string, selection trim
 	if err != nil {
 		return "", MediaInfo{}, err
 	}
-	audioFilter := ""
-	if denoiseModel != "" {
-		if !audio {
-			return "", MediaInfo{}, denoise.ErrNoAudio
-		}
-		audioFilter = denoise.Filter(denoiseModel)
+	if removeNoise && !audio {
+		return "", MediaInfo{}, denoise.ErrNoAudio
 	}
 	f, err := os.CreateTemp(filepath.Dir(source), ".tequilashot-trim-*.mp4")
 	if err != nil {
@@ -214,7 +203,7 @@ func exportTrim(ctx context.Context, source, denoiseModel string, selection trim
 	}
 	args := []string{
 		"-hide_banner", "-v", "error", "-nostdin", "-y", "-copyts", "-start_at_zero", "-i", source,
-		"-filter_complex", trimFilters(segments, audio, audioFilter), "-map", "[video]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-fps_mode", "vfr", "-enc_time_base", "1:1000000",
+		"-filter_complex", trimFilters(segments, audio), "-map", "[video]", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-fps_mode", "vfr", "-enc_time_base", "1:1000000",
 	}
 	if audio {
 		args = append(args, "-map", "[audio]", "-c:a", "aac", "-b:a", "192k")
@@ -231,11 +220,16 @@ func exportTrim(ctx context.Context, source, denoiseModel string, selection trim
 		return "", MediaInfo{}, fmt.Errorf("start FFmpeg: %w", err)
 	}
 	duration := trimLength(segments)
+	// Cleaning the sound afterwards takes about as long as the trim.
+	share := 1.0
+	if removeNoise {
+		share = 0.5
+	}
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		if value, ok := strings.CutPrefix(scanner.Text(), "out_time_us="); ok && progress != nil {
 			if us, err := strconv.ParseInt(value, 10, 64); err == nil {
-				progress(min(0.99, max(0, float64(us)/float64(duration.Microseconds()))))
+				progress(min(0.99, share*max(0, float64(us)/float64(duration.Microseconds()))))
 			}
 		}
 	}
@@ -247,6 +241,30 @@ func exportTrim(ctx context.Context, source, denoiseModel string, selection trim
 	}
 	if err := scanner.Err(); err != nil {
 		return "", MediaInfo{}, err
+	}
+	keys, _ := keylog.Load(source)
+	keys = trimKeys(keys, segments)
+	if removeNoise {
+		// Created private, like tmp, before FFmpeg writes the copy into it.
+		f, err := os.CreateTemp(filepath.Dir(source), ".tequilashot-denoise-*.mp4")
+		if err != nil {
+			return "", MediaInfo{}, err
+		}
+		cleaned := f.Name()
+		defer func() { _ = os.Remove(cleaned) }()
+		if err := f.Close(); err != nil {
+			return "", MediaInfo{}, err
+		}
+		var report func(float64)
+		if progress != nil {
+			report = func(f float64) { progress(min(0.99, share+(1-share)*f)) }
+		}
+		if err := denoise.Clean(ctx, tmp, cleaned, keys, report); err != nil {
+			return "", MediaInfo{}, err
+		}
+		if err := os.Rename(cleaned, tmp); err != nil {
+			return "", MediaInfo{}, err
+		}
 	}
 	info, err := ProbeMedia(ctx, tmp)
 	if err != nil {
@@ -277,8 +295,27 @@ func exportTrim(ctx context.Context, source, denoiseModel string, selection trim
 		} else if err != nil {
 			return "", MediaInfo{}, err
 		}
+		if !removeNoise && len(keys) > 0 {
+			_ = keylog.Save(target, keys)
+		}
 		return target, info, nil
 	}
+}
+
+// trimKeys moves the key times inside segments onto the timeline of the
+// joined segments and drops the rest.
+func trimKeys(keys []time.Duration, segments []trimSegment) []time.Duration {
+	var out []time.Duration
+	var offset time.Duration
+	for _, segment := range segments {
+		for _, k := range keys {
+			if k >= segment.start && k < segment.end {
+				out = append(out, k-segment.start+offset)
+			}
+		}
+		offset += segment.end - segment.start
+	}
+	return out
 }
 
 type trimHistory struct {

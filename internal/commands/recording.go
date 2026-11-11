@@ -18,6 +18,7 @@ import (
 	"github.com/chmouel/tequilashot/internal/config"
 	"github.com/chmouel/tequilashot/internal/external"
 	"github.com/chmouel/tequilashot/internal/gui"
+	"github.com/chmouel/tequilashot/internal/keylog"
 	"github.com/chmouel/tequilashot/internal/notify"
 	"github.com/chmouel/tequilashot/internal/state"
 	"github.com/chmouel/tequilashot/internal/sway"
@@ -41,6 +42,21 @@ type recordSession struct {
 	bubble   stopper
 	hider    statusBarHider
 	stopping atomic.Bool
+	// keys notes key times whilst the microphone is recorded; nil otherwise.
+	keys     *keylog.Logger
+	keysDone sync.Once
+}
+
+// saveKeys stops noting key times and stores them for the finished
+// recording, once the recorder has finalised it.
+func (s *recordSession) saveKeys() {
+	s.keysDone.Do(func() {
+		if s.keys == nil {
+			return
+		}
+		// Noise removal does without the key times if they cannot be kept.
+		_ = keylog.Save(s.base+".mp4", s.keys.Stop())
+	})
 }
 
 // ownsCache reports whether sess is still the latest session; callers hold h.mu.
@@ -383,6 +399,11 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 		return fmt.Errorf("failed to start recording: %w", err)
 	}
 	sess.pid = cmd.Process.Pid
+	if opts.Audio.Mic {
+		// Without access to the keyboards, noise removal does without the
+		// key times.
+		sess.keys, _ = keylog.Start()
+	}
 
 	// Publish the quiet flag before the recording becomes visible so a
 	// concurrent stop never sees the recording without its flag.
@@ -394,6 +415,7 @@ func (h *RecordingHandler) startRecording(ctx context.Context, geometry, output 
 	exited := make(chan error, 1)
 	go func() {
 		err := cmd.Wait()
+		sess.saveKeys()
 		sess.hider.Restore()
 		h.mu.Lock()
 		sess.bubble = nil
@@ -538,6 +560,7 @@ func (h *RecordingHandler) StopRecording(ctx context.Context) error {
 	var mp4File string
 	if sess != nil {
 		mp4File = sess.base + ".mp4"
+		sess.saveKeys()
 		h.releaseSession(sess, true)
 	} else {
 		data, err := os.ReadFile(h.cfg.CacheFile)
@@ -624,6 +647,11 @@ func (h *RecordingHandler) PauseRecording(ctx context.Context) error {
 	currentState := h.state.GetState()
 	newPausedState := !currentState.Paused
 	h.state.SetPaused(newPausedState)
+	h.mu.Lock()
+	if h.current != nil && h.current.pid == pid && h.current.keys != nil {
+		h.current.keys.SetPaused(newPausedState)
+	}
+	h.mu.Unlock()
 
 	if newPausedState {
 		_ = sendNotification(2000, h.cfg.RecordingPauseIcon, "Recording paused", "")

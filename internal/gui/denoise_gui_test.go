@@ -13,7 +13,7 @@ import (
 // autoDenoise must leave the recording as saved when the model is missing.
 func TestAutoDenoiseKeepsRecordingWithoutModel(t *testing.T) {
 	a := trimGUIApp(t)
-	t.Setenv(prefs.EnvDenoiseModel, filepath.Join(t.TempDir(), "missing.rnnn"))
+	t.Setenv(prefs.EnvDenoiseModel, filepath.Join(t.TempDir(), "missing.onnx"))
 	restore := prefs.Current()
 	t.Cleanup(func() { prefs.Set(restore) })
 	p := restore.Clone()
@@ -30,7 +30,7 @@ func TestAutoDenoiseKeepsRecordingWithoutModel(t *testing.T) {
 // The preference must not touch screenshots, which have no sound.
 func TestAutoDenoiseLeavesScreenshotsAlone(t *testing.T) {
 	a := trimGUIApp(t)
-	t.Setenv(prefs.EnvDenoiseModel, filepath.Join(t.TempDir(), "missing.rnnn"))
+	t.Setenv(prefs.EnvDenoiseModel, filepath.Join(t.TempDir(), "missing.onnx"))
 	restore := prefs.Current()
 	t.Cleanup(func() { prefs.Set(restore) })
 	p := restore.Clone()

@@ -93,7 +93,7 @@ func TestTrimHistoryInteraction(t *testing.T) {
 	defer cancel()
 	tr.redo.Emit("clicked")
 	tr.undo.Emit("clicked")
-	target, info, err := exportTrim(ctx, file, "", tr.selection, nil)
+	target, info, err := exportTrim(ctx, file, false, tr.selection, nil)
 	if err != nil || info.Duration != time.Second {
 		t.Fatalf("export after undo: %+v %v", info, err)
 	}

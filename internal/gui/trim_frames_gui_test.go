@@ -144,7 +144,7 @@ func TestTrimFrameInteraction(t *testing.T) {
 		tr.redo.Emit("clicked")
 		waitFrame(3)
 		ctx, cancel = context.WithTimeout(context.Background(), 20*time.Second)
-		target, _, err := exportTrim(ctx, file, "", tr.selection, nil)
+		target, _, err := exportTrim(ctx, file, false, tr.selection, nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)

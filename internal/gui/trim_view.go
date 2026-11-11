@@ -867,15 +867,14 @@ func (a *app) saveTrim() {
 	if _, err := t.selection.segments(); err != nil {
 		return
 	}
-	model := ""
-	if t.denoise.Active() {
+	removeNoise := t.denoise.Active()
+	if removeNoise {
 		if !denoise.ModelInstalled() {
 			a.offerDenoiseModel(denoiseTicket{
 				page: pageTrim, file: t.file, gen: t.gen, selection: t.selection, then: a.saveTrim,
 			})
 			return
 		}
-		model = denoise.ModelPath()
 	}
 	if t.media != nil {
 		t.media.Pause()
@@ -904,11 +903,11 @@ func (a *app) saveTrim() {
 	t.progress.SetVisible(true)
 	t.status.SetVisible(false)
 	file, selection, mode := t.file, t.selection, t.mode
-	cleanedOnly := model != "" && !selection.remove && selection.start == 0 && selection.end == selection.duration
+	cleanedOnly := removeNoise && !selection.remove && selection.start == 0 && selection.end == selection.duration
 	go func() {
 		defer close(done)
 		defer cancel()
-		target, info, err := exportTrim(ctx, file, model, selection, func(fraction float64) {
+		target, info, err := exportTrim(ctx, file, removeNoise, selection, func(fraction float64) {
 			glib.IdleAdd(func() {
 				if !a.closing && t.done == done {
 					t.progress.SetFraction(fraction)

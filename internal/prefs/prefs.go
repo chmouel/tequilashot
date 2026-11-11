@@ -102,9 +102,6 @@ type Prefs struct {
 	// AutoDenoise cleans the sound of every new recording, keeping the
 	// original.
 	AutoDenoise bool `json:"auto_denoise,omitempty"`
-	// ReduceClicks softens keyboard clicks that survive noise removal, at
-	// the cost of slightly duller high frequencies.
-	ReduceClicks bool `json:"reduce_clicks,omitempty"`
 }
 
 // Default returns the preferences used when nothing has been saved.
@@ -314,7 +311,7 @@ func DenoiseModelPath() string {
 // DefaultDenoiseModelPath is where the noise-removal model is looked for and
 // downloaded when no other location is configured.
 func DefaultDenoiseModelPath() string {
-	return filepath.Join(filepath.Dir(DefaultSegmentationModelPath()), "rnnoise-speech.rnnn")
+	return filepath.Join(filepath.Dir(DefaultSegmentationModelPath()), "deepfilternet3.onnx")
 }
 
 var autoDenoiseSession atomic.Bool

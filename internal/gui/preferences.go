@@ -728,7 +728,7 @@ func (d *prefsDialog) denoiseModelPath() string {
 
 func (d *prefsDialog) noisePage() *adw.NavigationPage {
 	page := adw.NewPreferencesPage()
-	model := newGroup("Model", "Removes background noise from speech when cleaning a recording. Leave the file empty to use "+prefs.DefaultDenoiseModelPath()+".")
+	model := newGroup("Model", "Removes background noise and keyboard clicks from speech when cleaning a recording. It also needs ONNX Runtime, as background removal does. Leave the file empty to use "+prefs.DefaultDenoiseModelPath()+".")
 	state := adw.NewActionRow()
 	state.SetTitle("Status")
 	model.Add(state)
@@ -770,9 +770,6 @@ func (d *prefsDialog) noisePage() *adw.NavigationPage {
 		d.update(func(p *prefs.Prefs) { p.AutoDenoise = on })
 	})
 	behaviour.Add(always)
-	behaviour.Add(switchRow("Reduce Keyboard Clicks", "Softens clicks that remain whilst you speak, at the cost of slightly duller high frequencies", d.p.ReduceClicks, func(on bool) {
-		d.update(func(p *prefs.Prefs) { p.ReduceClicks = on })
-	}))
 	page.Add(behaviour)
 
 	d.refresh = append(d.refresh, func() {

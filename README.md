@@ -226,21 +226,26 @@ such as subtitles, attachments and chapters, are copied as they are, so this
 is quick and costs no quality. The trimmer has a Remove noise toggle as well,
 which cleans the sound of the copy it saves.
 
-It uses FFmpeg's `arnndn` filter with an
-[RNNoise](https://jmvalin.ca/demo/rnnoise/) speech model from
-[rnnoise-models](https://github.com/GregorR/rnnoise-models). The first time,
-the dialogue offers a one-off download of about 300 KB to
-`~/.local/share/tequilashot/rnnoise-speech.rnnn`; the checksum is verified.
-Preferences, or `TEQUILASHOT_DENOISE_MODEL`, can point at another `.rnnn`
-model. The model leaves key presses alone, so the cleaned sound then passes
-through FFmpeg's `adeclick` filter, which softens those short impulses. Its
-conservative defaults are kept, since more eager settings audibly damage the
-speech. Clicks are quieter rather than gone: a loud one may still be heard.
+The cleaning is done by [DeepFilterNet3](https://github.com/Rikorose/DeepFilterNet)
+(MIT and Apache-2.0), a speech model run on the CPU through
+[ONNX Runtime](https://onnxruntime.ai/), the same library background removal
+uses. The first time, the dialogue offers a one-off download of about 9 MB to
+`~/.local/share/tequilashot/deepfilternet3.onnx`; the checksum is verified.
+Preferences, or `TEQUILASHOT_DENOISE_MODEL`, can point at another copy of the
+same model. Nothing leaves your computer.
 
-Clicks that overlap your voice cannot be told apart from it, so some remain.
-Reduce Keyboard Clicks on the same page lowers loud, short high-frequency
-bursts by about 8 dB, at the cost of slightly duller consonants. It is off by
-default.
+Keyboard clicks are the hard part, as no model can tell a click from a
+consonant when both land at once. While the microphone is being recorded,
+tequilashot therefore notes when keys go down and up, reading the keyboards
+under `/dev/input` (your user must be in the `input` group). Only the times are
+kept, never which key was pressed, in `~/.local/state/tequilashot/keytimes`;
+they follow the recording when it is renamed or moved on the same disk and are
+discarded after 90 days. Noise removal lines these times up with the sound,
+finds each click within a few milliseconds of its key and turns down whatever
+rises above the sound either side of it. The rest of the recording is left to
+the speech model. Without the times, for an older recording or one made
+without access to the keyboards, the speech model works alone and clicks are
+quieter rather than gone. Trimmed copies keep the times of the parts they keep.
 
 Switch on Always Remove Noise on the Noise Removal preferences page to clean
 the sound of every new recording as soon as it is saved, without pressing
@@ -310,7 +315,7 @@ command-line tools only.
 | [slurp](https://github.com/emersion/slurp) | Selecting a region |
 | [gpu-screen-recorder](https://git.dec05eba.com/gpu-screen-recorder/about/) | Recording video, audio and webcam input |
 | [wl-clipboard](https://github.com/bugaevc/wl-clipboard) | Clipboard commands |
-| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera, recording details, video trimming and noise removal (with `arnndn` and `adeclick`) |
+| [FFmpeg](https://ffmpeg.org/) | Camera previews, the round camera, recording details, video trimming and noise removal |
 
 Optional: [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) (round
 camera), [Satty](https://github.com/gabm/satty) (editing screenshots),
@@ -536,7 +541,7 @@ is the unit's environment that counts.
 | `TEQUILASHOT_AI_MODEL` | `gemini:gemini-2.5-flash-image` | Model used for AI-generated filenames |
 | `TEQUILASHOT_SEGMENTATION_MODEL` | `~/.local/share/tequilashot/u2net_human_seg.onnx` | Background removal model |
 | `TEQUILASHOT_ONNXRUNTIME_LIB` | system locations | ONNX Runtime shared library |
-| `TEQUILASHOT_DENOISE_MODEL` | `~/.local/share/tequilashot/rnnoise-speech.rnnn` | Noise removal model |
+| `TEQUILASHOT_DENOISE_MODEL` | `~/.local/share/tequilashot/deepfilternet3.onnx` | Noise removal model |
 | `TEQUILASHOT_AUTO_DENOISE` | off | Clean every new recording automatically; `1` or `0` overrides the preference |
 | `TEQUILASHOT_WAYBAR_POLL_INTERVAL` | `1s` | Waybar status polling interval; values below `100ms` use `100ms` |
 

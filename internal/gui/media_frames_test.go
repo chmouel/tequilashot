@@ -96,7 +96,7 @@ func TestFrameTimingAndExport(t *testing.T) {
 				if span[1] < len(w.times) {
 					end = w.times[span[1]]
 				}
-				target, _, err := exportTrim(ctx, file, "", trimSelection{w.times[span[0]], end, info.Duration, false}, nil)
+				target, _, err := exportTrim(ctx, file, false, trimSelection{w.times[span[0]], end, info.Duration, false}, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
