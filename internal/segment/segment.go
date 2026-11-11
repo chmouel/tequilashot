@@ -116,8 +116,8 @@ func startError(lib string, err error) error {
 		return fmt.Errorf("failed to start ONNX Runtime from %s: %w", lib, err)
 	}
 	found := lib
-	if real, rerr := filepath.EvalSymlinks(lib); rerr == nil {
-		found = real
+	if resolved, rerr := filepath.EvalSymlinks(lib); rerr == nil {
+		found = resolved
 	}
 	have := "an older version"
 	if m := versionRe.FindString(filepath.Base(found)); m != "" {
