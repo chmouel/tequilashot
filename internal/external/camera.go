@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -67,7 +68,10 @@ type CameraOverlay struct {
 	// RemoveBackground makes everything but the person transparent. It is
 	// only available for the round camera, which is drawn by tequilashot.
 	RemoveBackground bool
-	// NoRing hides the white ring; it needs RemoveBackground.
+	// Background is the path of a PNG or JPEG shown behind the person instead
+	// of transparency. It needs the round camera and excludes RemoveBackground.
+	Background string
+	// NoRing hides the white ring; it needs RemoveBackground or Background.
 	NoRing bool
 	Width  int // chosen camera mode; zero lets gpu-screen-recorder pick
 	Height int
@@ -103,8 +107,19 @@ func (c CameraOverlay) Validate() error {
 	if c.RemoveBackground && !c.Round() {
 		return fmt.Errorf("removing the camera background needs the circle shape")
 	}
-	if c.NoRing && !c.RemoveBackground {
-		return fmt.Errorf("hiding the camera ring needs the background removed")
+	if c.Background != "" {
+		if !c.Round() {
+			return fmt.Errorf("a camera background image needs the circle shape")
+		}
+		if c.RemoveBackground {
+			return fmt.Errorf("choose either a camera background image or background removal, not both")
+		}
+		if info, err := os.Stat(c.Background); err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("camera background %q is not a readable file", c.Background)
+		}
+	}
+	if c.NoRing && !c.RemoveBackground && c.Background == "" {
+		return fmt.Errorf("hiding the camera ring needs the background removed or replaced")
 	}
 	if c.Width < 0 || c.Height < 0 || c.FPS < 0 {
 		return fmt.Errorf("invalid camera mode %dx%d@%d", c.Width, c.Height, c.FPS)

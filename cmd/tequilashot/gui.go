@@ -59,6 +59,7 @@ func cameraBubbleAction(_ context.Context, c *cli.Command) error {
 		FPS:              c.Int("fps"),
 		Mirror:           c.Bool("mirror"),
 		RemoveBackground: c.Bool("remove-background"),
+		Background:       c.String("background"),
 		NoRing:           c.Bool("no-ring"),
 	})
 }

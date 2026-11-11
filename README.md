@@ -101,6 +101,18 @@ beneath shows through whilst the white ring stays. It works for the round
 camera in recordings and in the virtual camera, and not for the square one.
 Add Hide ring (`--camera-no-ring`) to drop the white ring as well.
 
+To put a picture behind you instead of transparency, pass
+`--camera-background <file>` with a PNG or JPEG. The picture is cropped to fill
+the circle and replaces your surroundings in recordings and in the virtual
+camera. It uses the same segmentation as Remove background, so the
+requirements below apply, and the two options cannot be combined. With
+`--camera-mirror` the picture itself is not mirrored.
+
+```sh
+tequilashot movie-screen --camera --camera-shape circle \
+    --camera-background ~/Pictures/office.jpg --camera-no-ring
+```
+
 The segmentation runs on the CPU, so expect a lower frame rate than the plain
 camera, roughly six pictures a second on a desktop processor. It is a
 person-segmentation model and will occasionally clip hair or hands. Nothing is
@@ -374,7 +386,7 @@ Recording flags:
   `--camera-position` (`top-left`, `top-right`, `bottom-left`, `bottom-right`),
   `--camera-size` (`small`, `medium`, `large`), `--camera-mirror` and
   `--camera-shape circle` for the [round camera](#round-camera), which also
-  accepts `--camera-remove-background`.
+  accepts `--camera-remove-background` or `--camera-background <file>`.
 - `--crop-top <px>` (screen recordings only): trim pixels from the top.
 
 ### Hyprland key bindings

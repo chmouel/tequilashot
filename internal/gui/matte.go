@@ -21,7 +21,9 @@ const matteStall = 5 * time.Second
 
 // cutter removes the background from camera frames off the GTK main thread.
 // It keeps one frame being processed and the newest one waiting, and each
-// result belongs to the frame it was computed from.
+// result belongs to the frame it was computed from. A non-nil bg replaces the
+// background instead of leaving it transparent; flipBg mirrors it first, for a
+// picture that is mirrored again on screen.
 type cutter struct {
 	mu       sync.Mutex
 	closed   bool
@@ -31,12 +33,14 @@ type cutter struct {
 	failOnce sync.Once
 	onFrame  func(*image.RGBA)
 	onFail   func(error)
+	bg       image.Image // replaces the background when not nil
+	flipBg   bool
 }
 
 // newCutter starts the worker. onFrame and onFail run on the worker goroutine
 // and onFail is called at most once; no frame is delivered after it.
-func newCutter(onFrame func(*image.RGBA), onFail func(error)) *cutter {
-	c := &cutter{in: make(chan []byte, 1), done: make(chan struct{}), onFrame: onFrame, onFail: onFail}
+func newCutter(bg image.Image, flipBg bool, onFrame func(*image.RGBA), onFail func(error)) *cutter {
+	c := &cutter{in: make(chan []byte, 1), done: make(chan struct{}), onFrame: onFrame, onFail: onFail, bg: bg, flipBg: flipBg}
 	go c.run()
 	go c.watch()
 	return c
@@ -69,6 +73,7 @@ func (c *cutter) run() {
 		return
 	}
 	defer m.Close()
+	m.SetBackground(c.bg, c.flipBg)
 	for frame := range c.in {
 		c.busy.Store(time.Now().UnixNano())
 		img, err := m.Cut(frame)

@@ -60,6 +60,9 @@ func (c CameraOverlay) bubbleArgs(x, y, diameter int, area image.Rectangle) []st
 	if c.RemoveBackground {
 		args = append(args, "--remove-background")
 	}
+	if c.Background != "" {
+		args = append(args, "--background", c.Background)
+	}
 	if c.NoRing {
 		args = append(args, "--no-ring")
 	}

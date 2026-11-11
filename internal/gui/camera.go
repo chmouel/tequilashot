@@ -630,6 +630,7 @@ func (a *app) syncPreview() {
 	w, h := external.PreviewMode(a.camModes, device)
 	if cut {
 		a.previewCutter = newCutter(
+			nil, false,
 			func(img *image.RGBA) {
 				glib.IdleAdd(func() {
 					if gen == a.previewGen {

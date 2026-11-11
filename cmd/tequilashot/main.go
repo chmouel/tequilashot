@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -367,6 +368,7 @@ func cameraBubbleCommand() *cli.Command {
 			&cli.IntFlag{Name: "fps"},
 			&cli.BoolFlag{Name: "mirror"},
 			&cli.BoolFlag{Name: "remove-background"},
+			&cli.StringFlag{Name: "background"},
 			&cli.BoolFlag{Name: "no-ring"},
 		},
 		Action: cameraBubbleAction,
@@ -618,9 +620,13 @@ func cameraFlags() []cli.Flag {
 			Name:  "camera-remove-background",
 			Usage: "Make everything but you transparent in the round camera (needs --camera-shape circle or the virtual camera)",
 		},
+		&cli.StringFlag{
+			Name:  "camera-background",
+			Usage: "Show a PNG or JPEG behind you in the round camera instead of transparency (not with --camera-remove-background)",
+		},
 		&cli.BoolFlag{
 			Name:  "camera-no-ring",
-			Usage: "Hide the white ring around the round camera (needs --camera-remove-background)",
+			Usage: "Hide the white ring around the round camera (needs --camera-remove-background or --camera-background)",
 		},
 	}
 }
@@ -650,6 +656,13 @@ func withCameraOptions(c *cli.Command, options map[string]interface{}) map[strin
 	options["camera_mirror"] = c.Bool("camera-mirror")
 	options["camera_remove_background"] = c.Bool("camera-remove-background")
 	options["camera_no_ring"] = c.Bool("camera-no-ring")
+	if bg := c.String("camera-background"); bg != "" {
+		// The daemon runs elsewhere, so a relative path would not resolve.
+		if abs, err := filepath.Abs(bg); err == nil {
+			bg = abs
+		}
+		options["camera_background"] = bg
+	}
 	return options
 }
 

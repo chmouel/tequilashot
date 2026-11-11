@@ -53,12 +53,15 @@ func DefaultModelPath() string {
 // an empty string. A different library takes effect only in a new process.
 func LoadedLibrary() string { return onnx.LoadedLibrary() }
 
-// Matter turns camera frames into frames whose background is transparent. It
-// is not safe for concurrent use.
+// Matter turns camera frames into frames whose background is transparent, or
+// replaced when SetBackground is used. It is not safe for concurrent use.
 type Matter struct {
 	session *ort.DynamicAdvancedSession
 	input   *ort.Tensor[float32]
 	small   []float32
+
+	bg     *image.RGBA // see SetBackground
+	scaled *image.RGBA
 }
 
 // New loads the model. It fails when the runtime or the model is missing.
@@ -138,7 +141,7 @@ func (m *Matter) CutImage(src image.Image) (*image.RGBA, error) {
 		return nil, errors.New("unexpected segmentation output")
 	}
 	normalise(mask.GetData(), m.small)
-	applyMask(rgba, m.small)
+	applyMask(rgba, m.small, m.background(w, h))
 	return rgba, nil
 }
 
@@ -172,7 +175,8 @@ func normalise(raw, dst []float32) {
 func clamp01(v float32) float32 { return max(0, min(1, v)) }
 
 // applyMask scales the mask up bilinearly and premultiplies the picture by it.
-func applyMask(img *image.RGBA, mask []float32) {
+// With a bg of the same size the person is blended over it and stays opaque.
+func applyMask(img *image.RGBA, mask []float32, bg *image.RGBA) {
 	w, h := img.Rect.Dx(), img.Rect.Dy()
 	for y := range h {
 		fy := (float32(y)+0.5)*side/float32(h) - 0.5
@@ -188,6 +192,15 @@ func applyMask(img *image.RGBA, mask []float32) {
 			bot := mask[y1*side+x0]*(1-tx) + mask[y1*side+x1]*tx
 			a := top*(1-ty) + bot*ty
 			o := img.PixOffset(x, y)
+			if bg != nil {
+				inv := 1 - a
+				bo := bg.PixOffset(x, y)
+				img.Pix[o] = byte(float32(img.Pix[o])*a + float32(bg.Pix[bo])*inv)
+				img.Pix[o+1] = byte(float32(img.Pix[o+1])*a + float32(bg.Pix[bo+1])*inv)
+				img.Pix[o+2] = byte(float32(img.Pix[o+2])*a + float32(bg.Pix[bo+2])*inv)
+				img.Pix[o+3] = 255
+				continue
+			}
 			img.Pix[o] = byte(float32(img.Pix[o]) * a)
 			img.Pix[o+1] = byte(float32(img.Pix[o+1]) * a)
 			img.Pix[o+2] = byte(float32(img.Pix[o+2]) * a)

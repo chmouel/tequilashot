@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/chmouel/tequilashot/internal/external"
+	"github.com/chmouel/tequilashot/internal/segment"
 
 	"github.com/diamondburned/gotk4/pkg/cairo"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
@@ -37,7 +38,9 @@ type BubbleOptions struct {
 	Mirror   bool
 	// RemoveBackground shows only the person, with the rest transparent.
 	RemoveBackground bool
-	NoRing           bool
+	// Background is a PNG or JPEG shown behind the person instead.
+	Background string
+	NoRing     bool
 }
 
 // bubbleCSS draws a transparent window holding a circular picture with a ring.
@@ -64,6 +67,13 @@ func RunCameraBubble(opts BubbleOptions) error {
 	}
 	if err := loadLayerShell(); err != nil {
 		return err
+	}
+	var background image.Image
+	if opts.Background != "" {
+		var err error
+		if background, err = segment.LoadBackground(opts.Background); err != nil {
+			return err
+		}
 	}
 	if opts.Width <= 0 || opts.Height <= 0 {
 		opts.Width, opts.Height = 640, 480
@@ -137,8 +147,9 @@ func RunCameraBubble(opts BubbleOptions) error {
 		// window stays hidden until the first cut-out picture is ready, and
 		// hides again if the cutting fails.
 		var onFrame func([]byte)
-		if opts.RemoveBackground {
+		if opts.RemoveBackground || background != nil {
 			cut = newCutter(
+				background, opts.Mirror,
 				func(img *image.RGBA) {
 					glib.IdleAdd(func() {
 						if failure == nil {
@@ -215,7 +226,7 @@ func buildBubble(app *gtk.Application, opts BubbleOptions) (*gtk.Window, *gtk.Pi
 
 	disc := gtk.NewBox(gtk.OrientationVertical, 0)
 	disc.AddCSSClass("easyshot-bubble-disc")
-	if opts.RemoveBackground {
+	if opts.RemoveBackground || opts.Background != "" {
 		disc.AddCSSClass("cutout")
 		if opts.NoRing {
 			disc.AddCSSClass("noring")

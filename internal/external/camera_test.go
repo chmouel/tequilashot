@@ -52,6 +52,10 @@ func TestCameraValidate(t *testing.T) {
 	if args := round.bubbleArgs(0, 0, 100, image.Rect(0, 0, 1920, 1080)); !slices.Contains(args, "--remove-background") || !slices.Contains(args, "--no-ring") {
 		t.Errorf("bubble arguments miss the cut-out flags: %v", args)
 	}
+	bg := filepath.Join(t.TempDir(), "bg.png")
+	if err := os.WriteFile(bg, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	bad := []CameraOverlay{
 		{},
 		{Device: "/dev/video0|DP-1"},
@@ -67,6 +71,10 @@ func TestCameraValidate(t *testing.T) {
 		{Device: testCameraDevice, RemoveBackground: true},
 		{Device: testCameraDevice, Shape: CameraSquare, RemoveBackground: true},
 		{Device: testCameraDevice, Shape: CameraCircle, NoRing: true},
+		{Device: testCameraDevice, Shape: CameraCircle, Background: "/nonexistent/bg.png"},
+		{Device: testCameraDevice, Shape: CameraSquare, Background: os.DevNull},
+		{Device: testCameraDevice, Shape: CameraCircle, Background: t.TempDir()},
+		{Device: testCameraDevice, Shape: CameraCircle, Background: bg, RemoveBackground: true},
 	}
 	for _, c := range bad {
 		if c.Validate() == nil {
@@ -290,5 +298,24 @@ func TestCameraIndex(t *testing.T) {
 	}
 	if i := CameraIndex(nil, "x"); i != 0 {
 		t.Fatalf("got %d", i)
+	}
+}
+
+func TestCameraBackgroundImage(t *testing.T) {
+	bg := filepath.Join(t.TempDir(), "bg.png")
+	if err := os.WriteFile(bg, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := CameraOverlay{Device: testCameraDevice, Shape: CameraCircle, Background: bg, NoRing: true}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("background image rejected: %v", err)
+	}
+	args := c.bubbleArgs(0, 0, 100, image.Rect(0, 0, 1920, 1080))
+	i := slices.Index(args, "--background")
+	if i < 0 || args[i+1] != bg {
+		t.Errorf("bubble arguments miss the background: %v", args)
+	}
+	if slices.Contains(args, "--remove-background") {
+		t.Errorf("background image must not request removal: %v", args)
 	}
 }
